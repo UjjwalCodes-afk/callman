@@ -530,17 +530,18 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_callkit_incoming/entities/android_params.dart';
-import 'package:flutter_callkit_incoming/entities/call_event.dart';
-import 'package:flutter_callkit_incoming/entities/call_kit_params.dart';
-import 'package:flutter_callkit_incoming/entities/ios_params.dart';
+// import 'package:flutter_callkit_incoming/entities/android_params.dart';
+// import 'package:flutter_callkit_incoming/entities/call_event.dart';
+// import 'package:flutter_callkit_incoming/entities/call_kit_params.dart';
+// import 'package:flutter_callkit_incoming/entities/ios_params.dart';
 import 'package:flutter_phone_direct_caller/flutter_phone_direct_caller.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:phone_state/phone_state.dart';
 import 'package:call_log/call_log.dart';
-import 'package:flutter_callkit_incoming/flutter_callkit_incoming.dart';
+import 'Interaction.dart';
+// import 'package:flutter_callkit_incoming/flutter_callkit_incoming.dart';
 
 
 
@@ -561,16 +562,162 @@ class _DialPadScreenState extends State<DialPadScreen> {
   StreamSubscription<PhoneState>? _phoneStateSubscription;
   bool _callStarted = false;
   DateTime? _callConnectedTime;
+  bool _recordCall = false;
+  String? _recordedFilePath; // 🔹 to save recorded file path
+
+
   // int callDuration = DateTime.now().difference(_callConnectedTime!).inSeconds;
   
+Future<void> _showInteractionPopupAndCall() async {
+  bool shouldContinue = true;
+
+  // Fetch the last interaction
+  final interactionData = await _fetchLastInteraction(phoneNumber);
+
+  if (interactionData != null) {
+    // Process the interaction data as needed (e.g., display it in the popup)
+    debugPrint("Interaction Data: ${interactionData}");
+  } else {
+    debugPrint("No interaction data found or failed to fetch.");
+  }
+
+  await showGeneralDialog(
+    context: context,
+    barrierDismissible: false,
+    barrierColor: Colors.transparent,
+    transitionDuration: const Duration(milliseconds: 300),
+    pageBuilder: (context, anim1, anim2) {
+      final screenWidth = MediaQuery.of(context).size.width;
+
+      return SafeArea(
+        child: Align(
+          alignment: Alignment.topCenter,
+          child: Material(
+            color: Colors.transparent,
+            child: Stack(
+              children: [
+                Container(
+                  width: screenWidth,
+                  margin: const EdgeInsets.only(top: 16),
+                  padding: const EdgeInsets.all(16),
+                  decoration: const BoxDecoration(
+                    color: Colors.black87,
+                    borderRadius: BorderRadius.vertical(
+                      bottom: Radius.circular(16),
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black45,
+                        blurRadius: 10,
+                        offset: Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: InteractionScreen(data: interactionData?? {}), // Pass the data
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    },
+  );
+
+  if (shouldContinue && mounted) {
+    await Future.delayed(const Duration(seconds: 3));
+    if (!mounted) return;
+    await _makeCall();
+  }
+}
+
+Future<Map<String, dynamic>?> _fetchLastInteraction(String callerNumber) async {
+  final prefs = await SharedPreferences.getInstance();
+  final token = prefs.getString('token');
+
+  if (token == null) {
+    debugPrint("No token found!");
+    return null;
+  }
+
+  final url = Uri.parse("https://api.callman.in/api/user/calls/last-interaction");
+
+  final body = {"callerNumber": callerNumber};
+
+  try {
+    final response = await http.post(
+      url,
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $token",
+      },
+      body: jsonEncode(body),
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      debugPrint("Interaction fetched successfully: $data");
+      return data;
+    } else {
+      debugPrint("Failed to fetch interaction: ${response.statusCode}");
+    }
+  } catch (e) {
+    debugPrint("Error fetching interaction: $e");
+  }
+
+  return null;
+}
+
+
+
+
+
 
 
 @override
 void initState() {
   super.initState();
+  _askRuntimePermissions();
   _listenToPhoneState();
-  _setupCallKitListeners();
+  
 }
+  Future<void> _askRuntimePermissions() async {
+    // Phone is already required – group them in one request.
+    final statuses = await [
+      Permission.phone,
+      Permission.microphone,
+      Permission.storage,          // on Android Q- devices
+      Permission.manageExternalStorage, // Android 11 +
+    ].request();
+
+    // Optional: check if something was denied and show rationale.
+    if (statuses[Permission.microphone]?.isDenied == true ||
+        statuses[Permission.storage]?.isDenied == true) {
+      debugPrint('🔴 Mic / Storage permission denied – recording will not work');
+    }
+  }
+  static const platform = MethodChannel('com.yourapp.call_recorder');
+
+Future<void> startRecording() async {
+  try {
+    await platform.invokeMethod('startRecording');
+  } on PlatformException catch (e) {
+    debugPrint("Failed to start recording: '${e.message}'.");
+  }
+}
+
+Future<String?> stopRecording() async {
+  try {
+    final path = await platform.invokeMethod<String>('stopRecording');
+    debugPrint('Recording stopped.');
+    return path;
+  } on PlatformException catch (e) {
+    debugPrint("Failed to stop recording: '${e.message}'.");
+    return null;
+  }
+}
+
+
+
 
 Future<int?> getCallDuration(String phoneNumber) async {
   final Iterable<CallLogEntry> entries = await CallLog.get();
@@ -591,43 +738,6 @@ Future<int?> getCallDuration(String phoneNumber) async {
 }
 
 
-  void _setupCallKitListeners() {
-  FlutterCallkitIncoming.onEvent.listen((CallEvent? event) async {
-    debugPrint('CallKit Event: ${event?.event}');
-
-    switch (event?.event) {
-      case Event.actionCallAccept:
-        _callConnectedTime = DateTime.now();
-        _callStarted = true;
-        await _sendCallData(); // Only when answered
-        break;
-
-      case Event.actionCallEnded:
-      case Event.actionCallTimeout:
-        if (_callStarted && _callConnectedTime != null) {
-          final duration = DateTime.now().difference(_callConnectedTime!).inSeconds;
-          debugPrint("Call duration via CallKit: $duration seconds");
-          await _sendCallEndData(duration);
-        } else {
-          await _sendCallEndData(); // Missed/declined
-        }
-        _callStarted = false;
-        _callConnectedTime = null;
-        break;
-
-      case Event.actionCallDecline:
-        debugPrint("User declined the call.");
-        await _sendCallEndData();
-        _callStarted = false;
-        _callConnectedTime = null;
-        break;
-
-      default:
-        // Other events: ringing, etc.
-        break;
-    }
-  });
-}
 
 
 
@@ -649,33 +759,39 @@ Future<int?> getCallDuration(String phoneNumber) async {
       debugPrint("Phone state changed: ${event.status}");
 
 if (event.status == PhoneStateStatus.CALL_STARTED && !_callStarted) {
-  await Future.delayed(Duration(seconds: 2)); // Optional: allow for connection delay
+  _callStarted = true;
+  _callConnectedTime = DateTime.now();
+  await _sendCallData();
 
-  // Check again in case the call ended meanwhile
-  if (!_callStarted) {
-    _callStarted = true;
-    _callConnectedTime = DateTime.now(); // More accurate after delay
-    await _sendCallData();
-  }
+if (status.isGranted) {
+  // Do NOT start recording here
+  await Future.delayed(const Duration(seconds: 1));
+  await FlutterPhoneDirectCaller.callNumber(phoneNumber);
 }
+
+}
+
 
 
 
 
 if (event.status == PhoneStateStatus.CALL_ENDED && _callStarted) {
+  if (_recordCall) {
+    _recordedFilePath = await stopRecording(); // ✅ capture file path
+    debugPrint('🎙 Recording saved at $_recordedFilePath');
+  }
+
   _callStarted = false;
 
   if (_callConnectedTime != null) {
     final duration = DateTime.now().difference(_callConnectedTime!).inSeconds;
     debugPrint("Call duration: $duration seconds");
-
-    // Optional: send duration to server
-    // Or modify _sendCallEndData to accept it
   }
 
   await _sendCallEndData();
-  _callConnectedTime = null; // Reset for next call
+  _callConnectedTime = null;
 }
+
 
     });
   }
@@ -725,7 +841,6 @@ Future<void> _sendCallData() async {
       },
       body: jsonEncode(body),
     );
-
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
       _callId = data['call']['_id'];
@@ -800,61 +915,79 @@ void _resetCallState() {
   _callConnectedTime = null;
   _callId = null;
   _callDataSent = false;
+  _recordCall = false;
 }
 
 
 
+
 Future<void> _makeCall() async {
+  if (phoneNumber.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Please enter a phone number")),
+    );
+    return;
+  }
+
+  bool? userWantsToRecord = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text("Record Call?"),
+      content: const Text("Do you want to record this call?"),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: const Text("No"),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(true),
+          child: const Text("Yes"),
+        ),
+      ],
+    ),
+  );
+
+  _recordCall = userWantsToRecord ?? false;
+
   var status = await Permission.phone.status;
   if (!status.isGranted) {
     status = await Permission.phone.request();
   }
 
-  if (status.isGranted && phoneNumber.isNotEmpty) {
-    _showCallingAlert();
-    final callUUID = DateTime.now().millisecondsSinceEpoch.toString();
+  if (status.isGranted) {
+    if (_recordCall) {
+      await startRecording();
+    }
 
-    // Step 1: Show CallKit screen
-    await FlutterCallkitIncoming.showCallkitIncoming(CallKitParams(
-      id: callUUID,
-      nameCaller: widget.userName ?? 'Guest',
-      handle: phoneNumber,
-      type: 0, // Audio
-      extra: {'userId': widget.email ?? ""},
-      android: const AndroidParams(
-        isCustomNotification: true,
-        isShowLogo: false,
-        ringtonePath: 'system_ringtone_default',
-        backgroundColor: '#0955fa',
-        backgroundUrl: 'https://example.com/bg.png',
-        actionColor: '#4CAF50',
-      ),
-      ios: const IOSParams(),
-    ));
+    // ✅ REMOVE this line ↓↓↓
+    // await FlutterCallkitIncoming.showCallkitIncoming(...);
 
-    // Step 2: Delay a little and start call
-    await Future.delayed(const Duration(seconds: 2));
+    await Future.delayed(const Duration(seconds: 1));
+
+    // 🔥 Make the actual call
     await FlutterPhoneDirectCaller.callNumber(phoneNumber);
   }
 }
 
 
-  void _showCallingAlert() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: Colors.black,
-        content: Text(
-          'Calling as ${widget.userName ?? "Guest"}',
-          style: const TextStyle(fontSize: 18, color: Colors.white),
-        ),
-      ),
-    );
 
-    Future.delayed(const Duration(seconds: 1), () {
-      Navigator.of(context).pop();
-    });
-  }
+
+  // void _showCallingAlert() {
+  //   showDialog(
+  //     context: context,
+  //     builder: (context) => AlertDialog(
+  //       backgroundColor: Colors.black,
+  //       content: Text(
+  //         'Calling as ${widget.userName ?? "Guest"}',
+  //         style: const TextStyle(fontSize: 18, color: Colors.white),
+  //       ),
+  //     ),
+  //   );
+
+  //   Future.delayed(const Duration(seconds: 1), () {
+  //     Navigator.of(context).pop();
+  //   });
+  // }
 
   Widget _buildDialButton(String label) {
     return Material(
@@ -932,7 +1065,9 @@ Future<void> _makeCall() async {
               children: [
                 FloatingActionButton(
                   backgroundColor: Colors.green,
-                  onPressed: _makeCall,
+                  onPressed: ()async{
+                    await _showInteractionPopupAndCall();
+                  },
                   child: const Icon(Icons.call, color: Colors.white),
                 ),
                 const SizedBox(width: 30),

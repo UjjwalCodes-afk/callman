@@ -73,7 +73,7 @@ class _WalletState extends State<Wallet> {
         onTap: _onItemTapped,
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: "Home"),
-          BottomNavigationBarItem(icon: Icon(Icons.settings), label: "Settings"),
+          BottomNavigationBarItem(icon: Icon(Icons.call_missed_outgoing), label: "Settings"),
           BottomNavigationBarItem(icon: Icon(Icons.call), label: "Shop"),
           BottomNavigationBarItem(icon: Icon(Icons.wallet), label: "Wallet"),
         ],

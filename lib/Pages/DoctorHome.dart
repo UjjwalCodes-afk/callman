@@ -1,10 +1,13 @@
 
 import 'package:callman/Pages/DialPad.dart';
 import 'package:callman/Pages/HomePage.dart';
+import 'package:callman/Pages/Login.dart';
 import 'package:callman/Pages/Notifications.dart';
+import 'package:callman/Pages/UserInformation.dart';
 // import 'package:callman/Pages/Shop.dart';
 import 'package:callman/Pages/Wallet.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   runApp(const MyApp());
@@ -29,6 +32,8 @@ class DoctorHomeScreen extends StatefulWidget {
   final String email;
   final String userName;
 
+  
+
   const DoctorHomeScreen({
     Key? key,
     required this.email,
@@ -40,6 +45,104 @@ class DoctorHomeScreen extends StatefulWidget {
 }
 
 class _DoctorHomeScreenState extends State<DoctorHomeScreen> {
+
+  
+
+  // Add this inside the _DoctorHomeScreenState class
+
+Drawer _buildDrawer() {
+  return Drawer(
+    child: ListView(
+      padding: EdgeInsets.zero,
+      children: [
+        DrawerHeader(
+          decoration: const BoxDecoration(
+            color: Color(0xFF00FFCB),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const CircleAvatar(
+                radius: 30,
+                backgroundImage: AssetImage("images/profilepic.jpg"),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                widget.userName,
+                style: const TextStyle(
+                  color: Colors.black,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              Text(
+                widget.email,
+                style: const TextStyle(
+                  color: Colors.black87,
+                  fontSize: 14,
+                ),
+              ),
+            ],
+          ),
+        ),
+        ListTile(
+          leading: const Icon(Icons.person),
+          title: const Text('Profile'),
+          onTap: () {
+            
+            Navigator.push(context, MaterialPageRoute(builder: (context) => UserProfilePage(avatarUrl: '', username: 'Mohit', phoneNumber: '9877358790')));
+            // Navigate or show profile logic
+          },
+        ),
+        ListTile(
+          leading: const Icon(Icons.notifications),
+          title: const Text('Notifications'),
+          onTap: () {
+            Navigator.pop(context);
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => NotificationScreen(
+                  email: widget.email,
+                  userName: widget.userName,
+                ),
+              ),
+            );
+          },
+        ),
+ListTile(
+  leading: const Icon(Icons.logout),
+  title: const Text('Logout'),
+  onTap: () async {
+    final prefs = await SharedPreferences.getInstance();
+
+    await prefs.remove('token');
+    print('Token removed.');
+
+    // Optional: Check if token is really removed
+    final token = prefs.getString('token');
+    if (token == null) {
+      print('✅ Token successfully removed.');
+    } else {
+      print('❌ Token still exists: $token');
+    }
+
+    // Navigate to login page and clear navigation stack
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (context) => LoginPage()),
+      (Route<dynamic> route) => false,
+    );
+  },
+),
+
+      ],
+    ),
+  );
+}
+
+
+
   String searchQuery = "";
   int _selectedIndex = 0;
 
@@ -96,6 +199,7 @@ Navigator.push(
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      drawer: _buildDrawer(),
       backgroundColor: Colors.white,
       body: SingleChildScrollView(
         child: Column(
@@ -118,28 +222,34 @@ Navigator.push(
   child: Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          const Icon(Icons.menu, size: 28, color: Colors.black),
-          
-        IconButton(
-  icon: const Icon(Icons.notifications, size: 28, color: Colors.black),
-  onPressed: () {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => NotificationScreen(
-          email: widget.email,
-          userName: widget.userName,
-        ),
+Row(
+  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  children: [
+    Builder(
+      builder: (context) => IconButton(
+        icon: const Icon(Icons.menu, size: 28, color: Colors.black),
+        onPressed: () {
+          Scaffold.of(context).openDrawer();
+        },
       ),
-    );
-  },
+    ),
+    IconButton(
+      icon: const Icon(Icons.notifications, size: 28, color: Colors.black),
+      onPressed: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => NotificationScreen(
+              email: widget.email,
+              userName: widget.userName,
+            ),
+          ),
+        );
+      },
+    ),
+  ],
 ),
 
-        ],
-      ),
       const SizedBox(height: 40),
       Text(
         "Welcome, ${widget.userName}",
@@ -311,7 +421,7 @@ Navigator.push(
         onTap: _onItemTapped,
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: "Home"),
-          BottomNavigationBarItem(icon: Icon(Icons.settings), label: "Settings"),
+          BottomNavigationBarItem(icon: Icon(Icons.call_missed_outgoing), label: "Settings"),
           BottomNavigationBarItem(icon: Icon(Icons.call), label: "Shop"),
           BottomNavigationBarItem(icon: Icon(Icons.wallet), label: "Wallet"),
           //  BottomNavigationBarItem(icon: Icon(Icons.call), label: "Call"),
