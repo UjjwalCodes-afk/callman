@@ -528,6 +528,7 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'package:callman/Pages/PostCallsDetailsScreen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 // import 'package:flutter_callkit_incoming/entities/android_params.dart';
@@ -540,7 +541,9 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:phone_state/phone_state.dart';
 import 'package:call_log/call_log.dart';
+import 'package:android_intent_plus/android_intent.dart';
 import 'Interaction.dart';
+// import 'PostCallsDetailsScreen.dart';
 // import 'package:flutter_callkit_incoming/flutter_callkit_incoming.dart';
 
 
@@ -566,10 +569,23 @@ class _DialPadScreenState extends State<DialPadScreen> {
   String? _recordedFilePath; // 🔹 to save recorded file path
 
 
+Future<void> checkOverlayPermission() async {
+  if (!await Permission.systemAlertWindow.isGranted) {
+    AndroidIntent intent = AndroidIntent(
+      action: 'android.settings.action.MANAGE_OVERLAY_PERMISSION',
+      data: 'com.example.callman',
+    );
+    await intent.launch();
+  }
+}
+
+  
+
+
   // int callDuration = DateTime.now().difference(_callConnectedTime!).inSeconds;
   
 Future<void> _showInteractionPopupAndCall() async {
-  bool shouldContinue = true;
+  // bool shouldContinue = true;
 
   // Fetch the last interaction
   final interactionData = await _fetchLastInteraction(phoneNumber);
@@ -623,9 +639,7 @@ Future<void> _showInteractionPopupAndCall() async {
     },
   );
 
-  if (shouldContinue && mounted) {
-    await Future.delayed(const Duration(seconds: 3));
-    if (!mounted) return;
+  if (mounted) {
     await _makeCall();
   }
 }
@@ -633,6 +647,7 @@ Future<void> _showInteractionPopupAndCall() async {
 Future<Map<String, dynamic>?> _fetchLastInteraction(String callerNumber) async {
   final prefs = await SharedPreferences.getInstance();
   final token = prefs.getString('token');
+  print(token);
 
   if (token == null) {
     debugPrint("No token found!");
@@ -642,7 +657,8 @@ Future<Map<String, dynamic>?> _fetchLastInteraction(String callerNumber) async {
   final url = Uri.parse("https://api.callman.in/api/user/calls/last-interaction");
 
   final body = {"callerNumber": callerNumber};
-
+  debugPrint("Request payload: $body");
+  
   try {
     final response = await http.post(
       url,
@@ -650,8 +666,17 @@ Future<Map<String, dynamic>?> _fetchLastInteraction(String callerNumber) async {
         "Content-Type": "application/json",
         "Authorization": "Bearer $token",
       },
+      
       body: jsonEncode(body),
     );
+    debugPrint("Request payload: $body");
+
+    debugPrint("Raw Response Body: ${response.body}");
+    debugPrint("Request Headers: ${response.request?.headers}");
+debugPrint("Request URL: ${response.request?.url}");
+debugPrint("Request Body: $body");
+
+
 
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
@@ -748,53 +773,71 @@ Future<int?> getCallDuration(String phoneNumber) async {
   }
 
   void _listenToPhoneState() async {
-    var status = await Permission.phone.status;
-    if (!status.isGranted) {
-      status = await Permission.phone.request();
+  var status = await Permission.phone.status;
+  if (!status.isGranted) {
+    status = await Permission.phone.request();
+  }
+
+  if (!status.isGranted) return;
+
+  _phoneStateSubscription = PhoneState.stream.listen((PhoneState event) async {
+    debugPrint("Phone state changed: ${event.status}");
+
+    if (event.status == PhoneStateStatus.CALL_STARTED && !_callStarted) {
+      _callStarted = true;
+      _callConnectedTime = DateTime.now();
+      await _sendCallData();
     }
 
-    if (!status.isGranted) return;
+    if (event.status == PhoneStateStatus.CALL_ENDED && _callStarted) {
+      if (_recordCall) {
+        _recordedFilePath = await stopRecording(); // Capture file path
+        debugPrint('🎙 Recording saved at $_recordedFilePath');
+      }
 
-    _phoneStateSubscription = PhoneState.stream.listen((PhoneState event) async {
-      debugPrint("Phone state changed: ${event.status}");
+      _callStarted = false;
 
-if (event.status == PhoneStateStatus.CALL_STARTED && !_callStarted) {
-  _callStarted = true;
-  _callConnectedTime = DateTime.now();
-  await _sendCallData();
+      if (_callConnectedTime != null) {
+        final duration = DateTime.now().difference(_callConnectedTime!).inSeconds;
+        debugPrint("Call duration: $duration seconds");
+      }
 
-if (status.isGranted) {
-  // Do NOT start recording here
-  await Future.delayed(const Duration(seconds: 1));
-  await FlutterPhoneDirectCaller.callNumber(phoneNumber);
+      await _sendCallEndData();
+
+      // Show the form dialog for reminder and remarks
+      if (mounted) {
+        _showReminderRemarksForm(context);
+      }
+
+      _callConnectedTime = null;
+    }
+  });
+}
+  //show reminder remarks form
+Future<void> _showReminderRemarksForm(BuildContext context) async {
+  await Navigator.of(context).push(
+    PageRouteBuilder(
+      opaque: false, // makes background transparent
+      barrierColor: Colors.transparent, // removes black overlay
+pageBuilder: (_, __, ___) {
+  return Scaffold(
+    backgroundColor: Colors.black.withOpacity(0.5), // optional dim
+    body: Center(
+      child: Material(
+        borderRadius: BorderRadius.circular(16),
+        child: PostCallDetailsCard(),
+      ),
+    ),
+  );
 }
 
+    ),
+  );
 }
 
 
 
 
-
-if (event.status == PhoneStateStatus.CALL_ENDED && _callStarted) {
-  if (_recordCall) {
-    _recordedFilePath = await stopRecording(); // ✅ capture file path
-    debugPrint('🎙 Recording saved at $_recordedFilePath');
-  }
-
-  _callStarted = false;
-
-  if (_callConnectedTime != null) {
-    final duration = DateTime.now().difference(_callConnectedTime!).inSeconds;
-    debugPrint("Call duration: $duration seconds");
-  }
-
-  await _sendCallEndData();
-  _callConnectedTime = null;
-}
-
-
-    });
-  }
 
   void _addDigit(String digit) {
     setState(() {

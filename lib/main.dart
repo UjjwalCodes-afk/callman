@@ -1,10 +1,24 @@
 
 import 'package:callman/Pages/SplashScreen.dart';
+import 'package:callman/Provider/TrueCallerOverLay.dart';
+// import 'package:callman/Provider/CallProvider.dart';
 import 'package:flutter/material.dart';
+// import 'package:provider/provider.dart';
 
-void main(){
-  runApp(const MyWidget());
+void main() {
+  runApp(MyWidget());
 }
+
+@pragma("vm:entry-point")
+void overlayMain() {
+  WidgetsFlutterBinding.ensureInitialized();
+  runApp(const MaterialApp(
+    debugShowCheckedModeBanner: false,
+    home: OverlayScreen(callerName: 'Mohit', callerNumber: '7986969580')
+  ));
+}
+
+
 
 class MyWidget extends StatelessWidget {
   const MyWidget({super.key});

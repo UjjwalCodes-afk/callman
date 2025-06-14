@@ -250,7 +250,7 @@ Row(
   ],
 ),
 
-      const SizedBox(height: 40),
+      // const SizedBox(height: 40),
       Text(
         "Welcome, ${widget.userName}",
         style: const TextStyle(
@@ -267,6 +267,7 @@ Row(
         ),
       ),
       const SizedBox(height: 20),
+      SizedBox(height: 20,),
       Container(
         height: 50,
         decoration: BoxDecoration(

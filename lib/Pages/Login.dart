@@ -62,6 +62,14 @@ class _LoginPageState extends State<LoginPage> {
       final domain = user['domain'] ?? '';
       final role = user['role'] ?? '';
 
+      // Restrict login for superadmin
+      if (role.toLowerCase() == 'superadmin') {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Superadmin role cannot log in.")),
+        );
+        return; // Stop further execution
+      }
+
       // Save data locally using SharedPreferences
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('token', token);
@@ -106,7 +114,6 @@ class _LoginPageState extends State<LoginPage> {
     });
   }
 }
-
 
 
   @override

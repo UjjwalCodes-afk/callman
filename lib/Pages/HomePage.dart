@@ -1,3 +1,4 @@
+
 // appointment_screen.dart
 import 'dart:convert';
 import 'package:callman/Pages/DialPad.dart';
@@ -19,7 +20,14 @@ class AppointmentScreen extends StatefulWidget {
 
 class _AppointmentScreenState extends State<AppointmentScreen> {
   int _selectedIndex = 1;
-  bool _isUpcoming = true;
+  // bool _isUpcoming = true;
+  String _currentTab = 'upcoming'; // 'upcoming', 'past', 'all'
+  int _selectedTab = 0; // 0: Upcoming, 1: Past, 2: All
+   late final ScrollController _scrollController = ScrollController();
+
+
+
+
   List<Map<String, dynamic>> _upcoming = [], _past = [];
   bool _isLoading = true;
 
@@ -28,12 +36,12 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
     super.initState();
     _fetchAllCalls();
   }
+Future<List<Map<String, dynamic>>> fetchTodaysUpcomingCalls() async {
+  final prefs = await SharedPreferences.getInstance();
+  final token = prefs.getString('token');
+  if (token == null) return [];
 
-  Future<List<Map<String, dynamic>>> fetchTodaysUpcomingCalls() async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('token');
-    if (token == null) return [];
-
+  try {
     final response = await http.get(
       Uri.parse('https://api.callman.in/api/user/calls/upcoming'),
       headers: {'Authorization': 'Bearer $token'},
@@ -41,12 +49,14 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
 
     if (response.statusCode != 200) return [];
 
-    final List<dynamic> calls = jsonDecode(response.body)['calls'] ?? [];
+    final data = jsonDecode(response.body);
+    final List<dynamic> calls = data['calls'] ?? [];
 
     final now = DateTime.now();
     final todayStart = DateTime(now.year, now.month, now.day);
     final todayEnd = todayStart.add(const Duration(days: 1));
 
+    // Filter calls that are scheduled for today
     final filteredCalls = calls.where((call) {
       final start = DateTime.tryParse(call['callStartDate'] ?? '');
       return start != null &&
@@ -54,14 +64,22 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
           start.isBefore(todayEnd);
     }).toList();
 
+    // Sort by callStartDate descending (latest to earliest)
     filteredCalls.sort((a, b) {
-      return DateTime.parse(a['callStartDate'])
-          .compareTo(DateTime.parse(b['callStartDate']));
+      final dateA = DateTime.tryParse(a['callStartDate'] ?? '') ?? DateTime(0);
+      final dateB = DateTime.tryParse(b['callStartDate'] ?? '') ?? DateTime(0);
+      return dateB.compareTo(dateA); // Descending order
     });
 
-    // ✅ Ensure type casting to List<Map<String, dynamic>>
     return List<Map<String, dynamic>>.from(filteredCalls);
+  } catch (e) {
+    print('Error fetching calls: $e');
+    return [];
   }
+}
+
+
+
 
   List<Map<String, dynamic>> getUpcomingSortedCalls(
       List<Map<String, dynamic>> allCalls) {
@@ -145,17 +163,39 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final content = _isLoading
-        ? const Center(child: CircularProgressIndicator())
-        : (_isUpcoming ? _upcoming : _past).isEmpty
-            ? Center(
-                child:
-                    Text(_isUpcoming ? 'No upcoming calls' : 'No past calls'))
-            : ListView(
-                children: (_isUpcoming ? _upcoming : _past)
-                    .map((c) => AppointmentCard(callData: c))
-                    .toList(),
-              );
+List<Map<String, dynamic>> displayedCalls;
+if (_currentTab == 'upcoming') {
+  displayedCalls = _upcoming;
+} else if (_currentTab == 'past') {
+  displayedCalls = _past;
+} else {
+  displayedCalls = [..._upcoming, ..._past]; // or use all fetched calls if needed
+}
+final List<Map<String, dynamic>> currentList = _selectedTab == 0
+    ? _upcoming
+    : _selectedTab == 1
+        ? _past
+        : [..._upcoming, ..._past]; // All = combine both
+
+final content = _isLoading
+    ? const Center(child: CircularProgressIndicator())
+    : currentList.isEmpty
+        ? Center(
+            child: Text(
+              _selectedTab == 0
+                  ? 'No upcoming calls'
+                  : _selectedTab == 1
+                      ? 'No past calls'
+                      : 'No calls found',
+            ),
+          )
+        : ListView(
+  controller: _scrollController,
+  children: currentList.map((c) => AppointmentCard(callData: c)).toList(),
+);
+
+
+
 
     return Scaffold(
       backgroundColor: const Color(0xFFE8EAF6),
@@ -172,19 +212,32 @@ class _AppointmentScreenState extends State<AppointmentScreen> {
           child: Column(
             children: [
               const SizedBox(height: 20),
-              Row(
-                children: [
-                  _TabButton(
-                      text: 'Upcoming',
-                      isSelected: _isUpcoming,
-                      onTap: () => setState(() => _isUpcoming = true)),
-                  const SizedBox(width: 8),
-                  _TabButton(
-                      text: 'Past',
-                      isSelected: !_isUpcoming,
-                      onTap: () => setState(() => _isUpcoming = false)),
-                ],
-              ),
+  Row(
+  children: [
+_TabButton(
+  text: 'Today',
+  isSelected: _selectedTab == 0,
+  onTap: () {
+    setState(() => _selectedTab = 0);
+    _scrollController.jumpTo(0); // scroll to top
+  },
+),
+
+    const SizedBox(width: 8),
+    const SizedBox(width: 8),
+_TabButton(
+  text: 'All Calls',
+  isSelected: _selectedTab == 2,
+  onTap: () {
+    setState(() => _selectedTab = 2);
+    _scrollController.jumpTo(0); // scroll to top
+  },
+),
+
+  ],
+),
+
+
               const SizedBox(height: 16),
               Expanded(child: content),
             ],
@@ -254,12 +307,22 @@ class AppointmentCard extends StatefulWidget {
 }
 
 class _AppointmentCardState extends State<AppointmentCard> {
+  // late final ScrollController _scrollController;
   late final TextEditingController _remarksCtrl;
   Map<String, dynamic> _call;
   DateTime? _reminderUtc;
   bool _updating = false;
   late final String _callId;
   bool _hasFetchedDetails = false;
+  bool _expanded = false;
+
+  
+
+
+  late final ScrollController _scrollController;
+
+
+
 
   _AppointmentCardState() : _call = const {};
 
@@ -277,17 +340,18 @@ class _AppointmentCardState extends State<AppointmentCard> {
     super.initState();
     _call = widget.callData;
     _callId = _call['_id'];
+       _scrollController = ScrollController(); 
     _remarksCtrl = TextEditingController(text: _call['remarks'] ?? '');
   }
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (!_hasFetchedDetails) {
-      _hasFetchedDetails = true;
-      _refreshCard();
-    }
+@override
+void didChangeDependencies() {
+  super.didChangeDependencies();
+  if (!_hasFetchedDetails) {
+    _hasFetchedDetails = true;
   }
+}
+
 
   //fetch today upcoming calls
 
@@ -391,6 +455,7 @@ Future<void> _refreshCard() async {
   @override
   void dispose() {
     _remarksCtrl.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -408,74 +473,84 @@ Future<void> _refreshCard() async {
     // final durationMin = ((c['callDuration'] ?? 0) / 60).ceil();
     final callType = (c['callType'] ?? 0) == 0 ? 'Outgoing' : 'Incoming';
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF00FFDA),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10)],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header row
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  _fmtIso(c['callStartDate'] ?? ''),
-                  style: const TextStyle(
-                      fontSize: 16, fontWeight: FontWeight.bold),
-                ),
+    return GestureDetector(
+  onTap: () {
+    setState(() {
+      _expanded = !_expanded;
+    });
+  },
+  child: AnimatedContainer(
+    duration: const Duration(milliseconds: 200),
+    margin: const EdgeInsets.only(bottom: 12),
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: const Color(0xFF00FFDA),
+      borderRadius: BorderRadius.circular(16),
+      boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10)],
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Header row
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                _fmtIso(c['callStartDate'] ?? ''),
+                style: const TextStyle(
+                    fontSize: 16, fontWeight: FontWeight.bold),
               ),
-              if (_updating)
-                const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-            ],
-          ),
-          const SizedBox(height: 8),
-
-          // Name & Number
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              RichText(
-                text: TextSpan(
-                  style: const TextStyle(color: Colors.black, fontSize: 14),
-                  children: [
-                    TextSpan(
-                        text: '${c['callerName']}\n',
-                        style: const TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 16)),
-                    TextSpan(text: '${c['callerNumber']}'),
-                  ],
-                ),
+            ),
+            if (_updating)
+              const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
               ),
-              const Icon(Icons.phone, color: Colors.black),
-            ],
-          ),
-          const SizedBox(height: 8),
+          ],
+        ),
+        const SizedBox(height: 8),
 
-          // Duration & Type
-          Row(
-            children: [
-              const Icon(Icons.timer, size: 16),
-              const SizedBox(width: 4),
-              Text(formatDuration(c['callDuration'] ?? 0)),
-              const Spacer(),
-              const Icon(Icons.info_outline, size: 16),
-              const SizedBox(width: 4),
-              Text(callType),
-            ],
-          ),
+        // Name & Number
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            RichText(
+              text: TextSpan(
+                style: const TextStyle(color: Colors.black, fontSize: 14),
+                children: [
+                  TextSpan(
+                      text: '${c['callerName']}\n',
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 16)),
+                  TextSpan(text: '${c['callerNumber']}'),
+                ],
+              ),
+            ),
+            const Icon(Icons.phone, color: Colors.black),
+          ],
+        ),
+        const SizedBox(height: 8),
+
+        // Duration & Type
+        Row(
+          children: [
+            const Icon(Icons.timer, size: 16),
+            const SizedBox(width: 4),
+            Text(formatDuration(c['callDuration'] ?? 0)),
+            const Spacer(),
+            const Icon(Icons.info_outline, size: 16),
+            const SizedBox(width: 4),
+            Text(callType),
+          ],
+        ),
+
+        // 🔽 Expanded content
+        if (_expanded) ...[
           const SizedBox(height: 16),
 
-          // Remarks
-          const Text('Remarks:', style: TextStyle(fontWeight: FontWeight.bold)),
+          const Text('Remarks:',
+              style: TextStyle(fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
           TextField(
             controller: _remarksCtrl,
@@ -485,22 +560,23 @@ Future<void> _refreshCard() async {
               filled: true,
               fillColor: Colors.white,
               border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none),
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
+              ),
               contentPadding:
                   const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             ),
           ),
           const SizedBox(height: 16),
 
-          // Reminder Picker
           const Text('Reminder:',
               style: TextStyle(fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
           GestureDetector(
             onTap: _pickReminder,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(12),
@@ -512,10 +588,11 @@ Future<void> _refreshCard() async {
                       size: 16, color: Colors.black54),
                   const SizedBox(width: 8),
                   Expanded(
-                      child: Text(
-                    _fmtUtc(_reminderUtc),
-                    style: const TextStyle(fontSize: 14),
-                  )),
+                    child: Text(
+                      _fmtUtc(_reminderUtc),
+                      style: const TextStyle(fontSize: 14),
+                    ),
+                  ),
                   const Icon(Icons.edit, size: 16, color: Colors.black54),
                 ],
               ),
@@ -523,7 +600,6 @@ Future<void> _refreshCard() async {
           ),
           const SizedBox(height: 16),
 
-// Save Button
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
@@ -540,8 +616,11 @@ Future<void> _refreshCard() async {
               ),
             ),
           ),
-        ],
-      ),
-    );
+        ]
+      ],
+    ),
+  ),
+);
+  
   }
 }

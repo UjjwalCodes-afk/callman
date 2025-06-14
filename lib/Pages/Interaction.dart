@@ -2,23 +2,41 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 class InteractionScreen extends StatelessWidget {
-  final Map<String, dynamic>? data; // Step 1
+  final Map<String, dynamic>? data; // Passed data from the API response
 
-  const InteractionScreen({Key? key, this.data}) : super(key: key); // Step 2
+  const InteractionScreen({Key? key, this.data}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    // Safe extraction
-    final callerName = data?['callerName']?['name'] ?? 'Unknown';
-    print("Caller Name: $callerName");
+    final callerName = data?['callerName'];
+String resolvedCallerName;
+
+if (callerName is String) {
+  resolvedCallerName = callerName;
+} else if (callerName is Map<String, dynamic> && callerName['name'] is String) {
+  resolvedCallerName = callerName['name'];
+} else {
+  resolvedCallerName = 'Unknown';
+}
+
+
     final call = data?['call'];
+
+    // Debug the data structure
+    print("Caller Name: $callerName");
+    print("Call Data: $call");
+
+final callDuration = call?['callDuration'] is int ? call['callDuration'] : 0;
+
+
+
     final startDateRaw = call?['callStartDate'];
     final remarks = call?['remarks'] ?? 'No remarks';
     final callType = call?['callType'] == 0 ? 'Outgoing' : 'Incoming';
 
     // Format date
     String formattedStartDate = 'N/A';
-    if (startDateRaw != null) {
+    if (startDateRaw is String) {
       final date = DateTime.tryParse(startDateRaw);
       if (date != null) {
         formattedStartDate = DateFormat('hh:mm a, dd MMM').format(date);
@@ -44,7 +62,6 @@ class InteractionScreen extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Header Row with Close Button
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -58,16 +75,13 @@ class InteractionScreen extends StatelessWidget {
                 ),
               ],
             ),
-
             const SizedBox(height: 4),
-
-            // Name
             Align(
               alignment: Alignment.centerLeft,
               child: Padding(
                 padding: const EdgeInsets.only(top: 4, bottom: 16),
                 child: Text(
-                  callerName,
+                  resolvedCallerName,
                   style: const TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.bold,
@@ -75,8 +89,6 @@ class InteractionScreen extends StatelessWidget {
                 ),
               ),
             ),
-
-            // Last Interaction Title
             const Align(
               alignment: Alignment.centerLeft,
               child: Text(
@@ -89,8 +101,6 @@ class InteractionScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 8),
-
-            // Last Interaction Box
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
@@ -101,7 +111,16 @@ class InteractionScreen extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    formattedStartDate,
+                    'Duration: ${callDuration} sec',
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Start: $formattedStartDate',
                     style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 6),
@@ -112,16 +131,11 @@ class InteractionScreen extends StatelessWidget {
                 ],
               ),
             ),
-
             const SizedBox(height: 24),
-
-            // Add Interaction Button
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: () {
-                  // Add action here
-                },
+                onPressed: () {},
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF0B2C49),
                   shape: RoundedRectangleBorder(
