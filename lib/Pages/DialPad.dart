@@ -531,6 +531,7 @@ import 'dart:convert';
 import 'package:callman/Pages/PostCallsDetailsScreen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_contacts/flutter_contacts.dart';
 // import 'package:flutter_callkit_incoming/entities/android_params.dart';
 // import 'package:flutter_callkit_incoming/entities/call_event.dart';
 // import 'package:flutter_callkit_incoming/entities/call_kit_params.dart';
@@ -542,6 +543,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:phone_state/phone_state.dart';
 import 'package:call_log/call_log.dart';
 import 'package:android_intent_plus/android_intent.dart';
+// import 'package:contacts_service/contacts_service.dart';
+
+
 import 'Interaction.dart';
 // import 'PostCallsDetailsScreen.dart';
 // import 'package:flutter_callkit_incoming/flutter_callkit_incoming.dart';
@@ -568,15 +572,53 @@ class _DialPadScreenState extends State<DialPadScreen> {
   bool _recordCall = false;
   String? _recordedFilePath; // 🔹 to save recorded file path
 
+  static const overlayChannel = MethodChannel('overlay_channel');
+
+Future<void> showOverlay(String name, String number) async {
+  try {
+    if (name.trim().isEmpty || number.trim().isEmpty) {
+      debugPrint("❌ Overlay not shown – Missing name or number");
+      return;
+    }
+
+    final normalizedNumber = normalizeNumber(number);
+    debugPrint("📲 Sending to Overlay → Name: $name | Number: $normalizedNumber");
+
+    await overlayChannel.invokeMethod('showOverlay', {
+      'callerName': name,
+      'callerNumber': normalizedNumber,
+    });
+  } on PlatformException catch (e) {
+    debugPrint("Failed to show overlay: '${e.message}'");
+  }
+}
+
+
+
 
 Future<void> checkOverlayPermission() async {
   if (!await Permission.systemAlertWindow.isGranted) {
-    AndroidIntent intent = AndroidIntent(
+    final intent = AndroidIntent(
       action: 'android.settings.action.MANAGE_OVERLAY_PERMISSION',
-      data: 'com.example.callman',
+      data: 'package:com.example.callman', // ✅ FIXED
     );
     await intent.launch();
   }
+}
+Future<String?> _getNameFromCallLog(String targetNumber) async {
+  final Iterable<CallLogEntry> entries = await CallLog.get();
+  final normalizedTarget = normalizeNumber(targetNumber);
+
+  for (final entry in entries) {
+    if (entry.number != null && normalizeNumber(entry.number!) == normalizedTarget) {
+      final name = entry.name;
+      if (name != null && name.trim().isNotEmpty) {
+        return name;
+      }
+    }
+  }
+
+  return null;
 }
 
   
@@ -585,17 +627,26 @@ Future<void> checkOverlayPermission() async {
   // int callDuration = DateTime.now().difference(_callConnectedTime!).inSeconds;
   
 Future<void> _showInteractionPopupAndCall() async {
-  // bool shouldContinue = true;
-
-  // Fetch the last interaction
-  final interactionData = await _fetchLastInteraction(phoneNumber);
-
-  if (interactionData != null) {
-    // Process the interaction data as needed (e.g., display it in the popup)
-    debugPrint("Interaction Data: ${interactionData}");
-  } else {
-    debugPrint("No interaction data found or failed to fetch.");
+  if (phoneNumber.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Please enter a phone number")),
+    );
+    return;
   }
+
+  debugPrint("Dialing number: $phoneNumber");
+
+  final interactionData = await _fetchLastInteraction(phoneNumber);
+  final callLogName = await _getNameFromCallLog(phoneNumber);
+  final contactName = await getContactNameByNumber(phoneNumber);
+  final displayName = callLogName ?? contactName ?? "Guest";
+
+  if (mounted) {
+  debugPrint("✅ Showing overlay with name: $displayName, number: $phoneNumber");
+  await showOverlay(displayName, phoneNumber);
+  await _makeCall();
+}
+
 
   await showGeneralDialog(
     context: context,
@@ -604,7 +655,6 @@ Future<void> _showInteractionPopupAndCall() async {
     transitionDuration: const Duration(milliseconds: 300),
     pageBuilder: (context, anim1, anim2) {
       final screenWidth = MediaQuery.of(context).size.width;
-
       return SafeArea(
         child: Align(
           alignment: Alignment.topCenter,
@@ -629,7 +679,7 @@ Future<void> _showInteractionPopupAndCall() async {
                       ),
                     ],
                   ),
-                  child: InteractionScreen(data: interactionData?? {}), // Pass the data
+                  child: InteractionScreen(data: interactionData ?? {}),
                 ),
               ],
             ),
@@ -640,9 +690,63 @@ Future<void> _showInteractionPopupAndCall() async {
   );
 
   if (mounted) {
+    await showOverlay(displayName, phoneNumber);
     await _makeCall();
   }
 }
+
+
+
+
+Future<List<String>> _getLastCallDetails() async {
+  final status = await Permission.phone.request();
+  if (!status.isGranted) return ["Unknown", "Unknown"];
+
+  final Iterable<CallLogEntry> entries = await CallLog.get();
+
+  // 🔍 Get most recent outgoing call
+  CallLogEntry? lastOutgoing = entries.firstWhere(
+    (entry) => entry.callType == CallType.outgoing && entry.number != null,
+    orElse: () => CallLogEntry.fromMap({}),
+  );
+
+  if (lastOutgoing.number == null) {
+    return ["Unknown", "Unknown"];
+  }
+
+  final number = lastOutgoing.number!;
+  final name = await getContactNameByNumber(number) ?? "Unknown";
+
+  return [name, number];
+}
+
+
+void debugPrintContacts() async {
+  final contacts = await FlutterContacts.getContacts(withProperties: true);
+  for (var c in contacts) {
+    for (var p in c.phones) {
+      print("${c.displayName} → ${p.number}");
+    }
+  }
+}
+
+String normalizeNumber(String number) {
+  number = number.replaceAll(RegExp(r'\D'), ''); // remove non-digits
+  if (number.length > 10) {
+    return number.substring(number.length - 10); // keep last 10 digits
+  }
+  return number;
+}
+
+
+Future<void> _requestContactPermission() async {
+  final isGranted = await FlutterContacts.requestPermission();
+  if (!isGranted) {
+    debugPrint("Contact permission denied!");
+  }
+}
+
+
 
 Future<Map<String, dynamic>?> _fetchLastInteraction(String callerNumber) async {
   final prefs = await SharedPreferences.getInstance();
@@ -701,25 +805,62 @@ debugPrint("Request Body: $body");
 @override
 void initState() {
   super.initState();
+  checkOverlayPermission();
+  debugPrintContacts();
+  _requestContactPermission();
   _askRuntimePermissions();
   _listenToPhoneState();
   
 }
-  Future<void> _askRuntimePermissions() async {
-    // Phone is already required – group them in one request.
-    final statuses = await [
-      Permission.phone,
-      Permission.microphone,
-      Permission.storage,          // on Android Q- devices
-      Permission.manageExternalStorage, // Android 11 +
-    ].request();
 
-    // Optional: check if something was denied and show rationale.
-    if (statuses[Permission.microphone]?.isDenied == true ||
-        statuses[Permission.storage]?.isDenied == true) {
-      debugPrint('🔴 Mic / Storage permission denied – recording will not work');
+
+Future<String?> getContactNameByNumber(String number) async {
+  final hasPermission = await FlutterContacts.requestPermission();
+  if (!hasPermission) return null;
+
+  final contacts = await FlutterContacts.getContacts(withProperties: true);
+  final inputNumber = normalizeNumber(number);
+
+  for (final contact in contacts) {
+    for (final phone in contact.phones) {
+      final stored = normalizeNumber(phone.number);
+      if (stored == inputNumber) {
+        return contact.displayName;
+      }
     }
   }
+
+  return null;
+}
+
+
+
+Future<void> _askRuntimePermissions() async {
+  final statuses = await [
+    Permission.phone,
+    Permission.microphone,
+    Permission.contacts,           // ⬅️ Needed for caller name
+    Permission.phone,           // ⬅️ Needed to fetch call duration & logs
+    Permission.storage,
+    Permission.manageExternalStorage,
+    Permission.systemAlertWindow,  // ⬅️ Overlay permission
+  ].request();
+
+  if (statuses[Permission.microphone]?.isDenied == true ||
+      statuses[Permission.storage]?.isDenied == true) {
+    debugPrint('🔴 Mic / Storage permission denied – recording will not work');
+  }
+
+  if (statuses[Permission.systemAlertWindow]?.isDenied == true) {
+    debugPrint('🔴 Overlay permission is required to show floating views.');
+    final intent = AndroidIntent(
+      action: 'android.settings.action.MANAGE_OVERLAY_PERMISSION',
+      data: 'package:com.example.callman',
+    );
+    await intent.launch();
+  }
+}
+
   static const platform = MethodChannel('com.yourapp.call_recorder');
 
 Future<void> startRecording() async {
@@ -836,9 +977,6 @@ pageBuilder: (_, __, ___) {
 }
 
 
-
-
-
   void _addDigit(String digit) {
     setState(() {
       phoneNumber += digit;
@@ -897,6 +1035,9 @@ Future<void> _sendCallData() async {
     debugPrint("Error sending call data: $e");
   }
 }
+
+  
+
 
 
 Future<void> _sendCallEndData([int? duration]) async {
