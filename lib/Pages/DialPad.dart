@@ -593,9 +593,6 @@ Future<void> showOverlay(String name, String number) async {
   }
 }
 
-
-
-
 Future<void> checkOverlayPermission() async {
   if (!await Permission.systemAlertWindow.isGranted) {
     final intent = AndroidIntent(
@@ -621,11 +618,6 @@ Future<String?> _getNameFromCallLog(String targetNumber) async {
   return null;
 }
 
-  
-
-
-  // int callDuration = DateTime.now().difference(_callConnectedTime!).inSeconds;
-  
 Future<void> _showInteractionPopupAndCall() async {
   if (phoneNumber.isEmpty) {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -641,13 +633,14 @@ Future<void> _showInteractionPopupAndCall() async {
   final contactName = await getContactNameByNumber(phoneNumber);
   final displayName = callLogName ?? contactName ?? "Guest";
 
-  if (mounted) {
+  if (!mounted) return;
+
   debugPrint("✅ Showing overlay with name: $displayName, number: $phoneNumber");
+
+  // ✅ Show overlay first
   await showOverlay(displayName, phoneNumber);
-  await _makeCall();
-}
 
-
+  // ✅ Show interaction popup
   await showGeneralDialog(
     context: context,
     barrierDismissible: false,
@@ -679,8 +672,13 @@ Future<void> _showInteractionPopupAndCall() async {
                       ),
                     ],
                   ),
-                  child: InteractionScreen(data: interactionData ?? {}),
-                ),
+             child: InteractionScreen(
+                    data: interactionData ?? {},
+                    onCall: () async {
+                      await _makeCall();           // Start call
+                    },
+                  ),
+                )
               ],
             ),
           ),
@@ -689,37 +687,32 @@ Future<void> _showInteractionPopupAndCall() async {
     },
   );
 
-  if (mounted) {
-    await showOverlay(displayName, phoneNumber);
-    await _makeCall();
-  }
+  // ✅ Make the call *only once*
+  // await _makeCall();
 }
 
 
+// Future<List<String>> _getLastCallDetails() async {
+//   final status = await Permission.phone.request();
+//   if (!status.isGranted) return ["Unknown", "Unknown"];
 
+//   final Iterable<CallLogEntry> entries = await CallLog.get();
 
-Future<List<String>> _getLastCallDetails() async {
-  final status = await Permission.phone.request();
-  if (!status.isGranted) return ["Unknown", "Unknown"];
+//   // 🔍 Get most recent outgoing call
+//   CallLogEntry? lastOutgoing = entries.firstWhere(
+//     (entry) => entry.callType == CallType.outgoing && entry.number != null,
+//     orElse: () => CallLogEntry.fromMap({}),
+//   );
 
-  final Iterable<CallLogEntry> entries = await CallLog.get();
+//   if (lastOutgoing.number == null) {
+//     return ["Unknown", "Unknown"];
+//   }
 
-  // 🔍 Get most recent outgoing call
-  CallLogEntry? lastOutgoing = entries.firstWhere(
-    (entry) => entry.callType == CallType.outgoing && entry.number != null,
-    orElse: () => CallLogEntry.fromMap({}),
-  );
+//   final number = lastOutgoing.number!;
+//   final name = await getContactNameByNumber(number) ?? "Unknown";
 
-  if (lastOutgoing.number == null) {
-    return ["Unknown", "Unknown"];
-  }
-
-  final number = lastOutgoing.number!;
-  final name = await getContactNameByNumber(number) ?? "Unknown";
-
-  return [name, number];
-}
-
+//   return [name, number];
+// }
 
 void debugPrintContacts() async {
   final contacts = await FlutterContacts.getContacts(withProperties: true);
@@ -745,8 +738,6 @@ Future<void> _requestContactPermission() async {
     debugPrint("Contact permission denied!");
   }
 }
-
-
 
 Future<Map<String, dynamic>?> _fetchLastInteraction(String callerNumber) async {
   final prefs = await SharedPreferences.getInstance();
@@ -796,12 +787,6 @@ debugPrint("Request Body: $body");
   return null;
 }
 
-
-
-
-
-
-
 @override
 void initState() {
   super.initState();
@@ -812,7 +797,6 @@ void initState() {
   _listenToPhoneState();
   
 }
-
 
 Future<String?> getContactNameByNumber(String number) async {
   final hasPermission = await FlutterContacts.requestPermission();
@@ -832,8 +816,6 @@ Future<String?> getContactNameByNumber(String number) async {
 
   return null;
 }
-
-
 
 Future<void> _askRuntimePermissions() async {
   final statuses = await [
@@ -882,9 +864,6 @@ Future<String?> stopRecording() async {
   }
 }
 
-
-
-
 Future<int?> getCallDuration(String phoneNumber) async {
   final Iterable<CallLogEntry> entries = await CallLog.get();
 
@@ -902,10 +881,6 @@ Future<int?> getCallDuration(String phoneNumber) async {
 
   return latestMatch?.duration;
 }
-
-
-
-
 
   @override
   void dispose() {
@@ -1036,10 +1011,6 @@ Future<void> _sendCallData() async {
   }
 }
 
-  
-
-
-
 Future<void> _sendCallEndData([int? duration]) async {
   if (_callId == null) {
     debugPrint("No callId to update.");
@@ -1113,25 +1084,7 @@ Future<void> _makeCall() async {
     return;
   }
 
-  bool? userWantsToRecord = await showDialog<bool>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: const Text("Record Call?"),
-      content: const Text("Do you want to record this call?"),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(false),
-          child: const Text("No"),
-        ),
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(true),
-          child: const Text("Yes"),
-        ),
-      ],
-    ),
-  );
-
-  _recordCall = userWantsToRecord ?? false;
+  _recordCall = false;
 
   var status = await Permission.phone.status;
   if (!status.isGranted) {

@@ -3,33 +3,25 @@ import 'package:intl/intl.dart';
 
 class InteractionScreen extends StatelessWidget {
   final Map<String, dynamic>? data; // Passed data from the API response
+  final VoidCallback onCall;        // <-- NEW callback to trigger call
 
-  const InteractionScreen({Key? key, this.data}) : super(key: key);
+  const InteractionScreen({Key? key, this.data, required this.onCall}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     final callerName = data?['callerName'];
-String resolvedCallerName;
+    String resolvedCallerName;
 
-if (callerName is String) {
-  resolvedCallerName = callerName;
-} else if (callerName is Map<String, dynamic> && callerName['name'] is String) {
-  resolvedCallerName = callerName['name'];
-} else {
-  resolvedCallerName = 'Unknown';
-}
-
+    if (callerName is String) {
+      resolvedCallerName = callerName;
+    } else if (callerName is Map<String, dynamic> && callerName['name'] is String) {
+      resolvedCallerName = callerName['name'];
+    } else {
+      resolvedCallerName = 'Unknown';
+    }
 
     final call = data?['call'];
-
-    // Debug the data structure
-    print("Caller Name: $callerName");
-    print("Call Data: $call");
-
-final callDuration = call?['callDuration'] is int ? call['callDuration'] : 0;
-
-
-
+    final callDuration = call?['callDuration'] is int ? call['callDuration'] : 0;
     final startDateRaw = call?['callStartDate'];
     final remarks = call?['remarks'] ?? 'No remarks';
     final callType = call?['callType'] == 0 ? 'Outgoing' : 'Incoming';
@@ -46,7 +38,7 @@ final callDuration = call?['callDuration'] is int ? call['callDuration'] : 0;
     return Center(
       child: Container(
         width: MediaQuery.of(context).size.width * 0.9,
-        constraints: const BoxConstraints(maxHeight: 400),
+        constraints: const BoxConstraints(maxHeight: 480),
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
           color: Colors.white,
@@ -62,6 +54,7 @@ final callDuration = call?['callDuration'] is int ? call['callDuration'] : 0;
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // Header Row
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -75,7 +68,10 @@ final callDuration = call?['callDuration'] is int ? call['callDuration'] : 0;
                 ),
               ],
             ),
+
             const SizedBox(height: 4),
+
+            // Caller Name
             Align(
               alignment: Alignment.centerLeft,
               child: Padding(
@@ -89,6 +85,7 @@ final callDuration = call?['callDuration'] is int ? call['callDuration'] : 0;
                 ),
               ),
             ),
+
             const Align(
               alignment: Alignment.centerLeft,
               child: Text(
@@ -100,7 +97,10 @@ final callDuration = call?['callDuration'] is int ? call['callDuration'] : 0;
                 ),
               ),
             ),
+
             const SizedBox(height: 8),
+
+            // Interaction Box
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
@@ -131,27 +131,60 @@ final callDuration = call?['callDuration'] is int ? call['callDuration'] : 0;
                 ],
               ),
             ),
+
             const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () {},
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF0B2C49),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
+
+            // Buttons
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () {
+                      Navigator.of(context).pop(); // Close popup
+                      onCall();                     // Trigger the call
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green[700],
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    child: const Text(
+                      '📞 Call Now',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.1,
+                      ),
+                    ),
                   ),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
                 ),
-                child: const Text(
-                  'ADD INTERACTION',
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.1,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () {
+                      // Add Interaction button pressed logic
+                      // You can open another screen or form
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0B2C49),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    child: const Text(
+                      'ADD INTERACTION',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.1,
+                      ),
+                    ),
                   ),
                 ),
-              ),
+              ],
             ),
           ],
         ),

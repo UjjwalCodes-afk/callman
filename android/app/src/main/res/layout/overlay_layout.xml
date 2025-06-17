@@ -5,11 +5,12 @@
     android:layout_height="wrap_content"
     android:orientation="horizontal"
     android:padding="12dp"
-    android:background="@drawable/overlay_background"
-    android:elevation="10dp"
-    android:gravity="center_vertical">
+    android:background="#1976D2"
+    android:elevation="16dp"
+    android:gravity="center_vertical"
+    android:layout_margin="8dp"
+    android:layout_gravity="top">
 
-    <!-- Caller Image -->
     <ImageView
         android:id="@+id/caller_image"
         android:layout_width="56dp"
@@ -20,7 +21,6 @@
         android:scaleType="centerCrop"
         android:padding="4dp" />
 
-    <!-- Name & Number Block -->
     <LinearLayout
         android:layout_width="0dp"
         android:layout_height="wrap_content"
@@ -42,10 +42,9 @@
             android:layout_height="wrap_content"
             android:text="+91 12345 67890"
             android:textSize="14sp"
-            android:textColor="#CCCCCC" />
+            android:textColor="#E0E0E0" />
     </LinearLayout>
 
-    <!-- Close Button -->
     <ImageView
         android:id="@+id/close_button"
         android:layout_width="24dp"
