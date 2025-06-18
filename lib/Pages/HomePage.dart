@@ -1,13 +1,13 @@
-
-// appointment_screen.dart
+import 'dart:async';
 import 'dart:convert';
+import 'package:call_log/call_log.dart';
 import 'package:callman/Pages/DialPad.dart';
+import 'package:callman/Pages/DoctorHome.dart';
+import 'package:callman/Pages/Settings.dart';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'DoctorHome.dart';
-import 'Wallet.dart';
 
 class AppointmentScreen extends StatefulWidget {
   final String email, userName;
@@ -20,129 +20,136 @@ class AppointmentScreen extends StatefulWidget {
 
 class _AppointmentScreenState extends State<AppointmentScreen> {
   int _selectedIndex = 1;
-  // bool _isUpcoming = true;
-  String _currentTab = 'upcoming'; // 'upcoming', 'past', 'all'
-  int _selectedTab = 0; // 0: Upcoming, 1: Past, 2: All
-   late final ScrollController _scrollController = ScrollController();
-
-
-
-
-  List<Map<String, dynamic>> _upcoming = [], _past = [];
+  String _currentTab = 'all'; // 'all', 'missed', 'outgoing', 'incoming'
+  late final ScrollController _scrollController = ScrollController();
+  List<CallLogEntry> _callLogs = [];
   bool _isLoading = true;
+  bool _permissionDenied = false;
+  Map<String, Map<String, dynamic>> _callReminders = {};
 
   @override
   void initState() {
     super.initState();
-    _fetchAllCalls();
+    _fetchCallLogs();
+    _loadReminders(); // Add this
   }
-Future<List<Map<String, dynamic>>> fetchTodaysUpcomingCalls() async {
+Future<void> _loadReminders() async {
   final prefs = await SharedPreferences.getInstance();
-  final token = prefs.getString('token');
-  if (token == null) return [];
-
-  try {
-    final response = await http.get(
-      Uri.parse('https://api.callman.in/api/user/calls/upcoming'),
-      headers: {'Authorization': 'Bearer $token'},
-    );
-
-    if (response.statusCode != 200) return [];
-
-    final data = jsonDecode(response.body);
-    final List<dynamic> calls = data['calls'] ?? [];
-
-    final now = DateTime.now();
-    final todayStart = DateTime(now.year, now.month, now.day);
-    final todayEnd = todayStart.add(const Duration(days: 1));
-
-    // Filter calls that are scheduled for today
-    final filteredCalls = calls.where((call) {
-      final start = DateTime.tryParse(call['callStartDate'] ?? '');
-      return start != null &&
-          start.isAfter(todayStart) &&
-          start.isBefore(todayEnd);
-    }).toList();
-
-    // Sort by callStartDate descending (latest to earliest)
-    filteredCalls.sort((a, b) {
-      final dateA = DateTime.tryParse(a['callStartDate'] ?? '') ?? DateTime(0);
-      final dateB = DateTime.tryParse(b['callStartDate'] ?? '') ?? DateTime(0);
-      return dateB.compareTo(dateA); // Descending order
+  final reminders = prefs.getStringList('call_reminders') ?? [];
+  
+  final Map<String, Map<String, dynamic>> reminderMap = {};
+  for (final reminderJson in reminders) {
+    try {
+      final reminder = jsonDecode(reminderJson) as Map<String, dynamic>;
+      // Use the same callId format as when creating reminders
+      reminderMap[reminder['callId']] = reminder;
+    } catch (e) {
+      debugPrint('Error parsing reminder: $e');
+    }
+  }
+  
+  if (mounted) {
+    setState(() {
+      _callReminders = reminderMap;
     });
-
-    return List<Map<String, dynamic>>.from(filteredCalls);
-  } catch (e) {
-    print('Error fetching calls: $e');
-    return [];
   }
 }
 
-
-
-
-  List<Map<String, dynamic>> getUpcomingSortedCalls(
-      List<Map<String, dynamic>> allCalls) {
-    final now = DateTime.now().toUtc();
-    return allCalls.where((call) {
-      final start = DateTime.tryParse(call['callStartDate'] ?? '')?.toUtc();
-      final end = DateTime.tryParse(call['callEndDate'] ?? '')?.toUtc();
-
-      // Valid only if start exists
-      if (start == null) return false;
-
-      // Upcoming = start is after now, or it's ongoing (start before now and end after now)
-      final isUpcoming = start.isAfter(now) ||
-          (end != null && start.isBefore(now) && end.isAfter(now));
-
-      return isUpcoming;
-    }).toList()
-      ..sort((a, b) {
-        final aDate =
-            DateTime.tryParse(a['callStartDate'] ?? '') ?? DateTime(2000);
-        final bDate =
-            DateTime.tryParse(b['callStartDate'] ?? '') ?? DateTime(2000);
-        return aDate.compareTo(bDate);
-      });
-  }
-
-  //update calls
-
-  Future<void> _fetchAllCalls() async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('token');
-    if (token == null) return;
-
-    // Use new function to get only today's upcoming calls
-    _upcoming = await fetchTodaysUpcomingCalls();
-
-    final res = await http.get(
-      Uri.parse('https://api.callman.in/api/user/calls'),
-      headers: {'Authorization': 'Bearer $token'},
-    );
-
-    if (res.statusCode == 200) {
-      final body = jsonDecode(res.body);
-      final calls = List<Map<String, dynamic>>.from(body['calls'] ?? []);
-
-      final now = DateTime.now().toUtc();
-
-      _past = calls.where((call) {
-        final end = DateTime.tryParse(call['callEndDate'] ?? '')?.toUtc();
-        return end != null && !end.isAfter(now);
-      }).toList()
-        ..sort((a, b) {
-          final aDate =
-              DateTime.tryParse(a['callEndDate'] ?? '') ?? DateTime(2000);
-          final bDate =
-              DateTime.tryParse(b['callEndDate'] ?? '') ?? DateTime(2000);
-          return bDate.compareTo(aDate); // descending
+  Future<void> _fetchCallLogs() async {
+    var status = await Permission.phone.status;
+    if (!status.isGranted) {
+      status = await Permission.phone.request();
+      if (!status.isGranted) {
+        setState(() {
+          _permissionDenied = true;
+          _isLoading = false;
         });
-    } else {
-      debugPrint('❌ Error fetching calls: ${res.statusCode}');
+        return;
+      }
     }
 
-    setState(() => _isLoading = false);
+    try {
+      final Iterable<CallLogEntry> entries = await CallLog.get();
+      setState(() {
+        _callLogs = entries.toList()
+          ..sort((a, b) => (b.timestamp ?? 0).compareTo(a.timestamp ?? 0));
+        _isLoading = false;
+      });
+      _loadReminders();
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+      debugPrint('Error fetching call logs: $e');
+    }
+  }
+
+  List<CallLogEntry> get _filteredCallLogs {
+    switch (_currentTab) {
+      case 'missed':
+        return _callLogs.where((log) => log.callType == CallType.missed).toList();
+      case 'outgoing':
+        return _callLogs.where((log) => log.callType == CallType.outgoing).toList();
+      case 'incoming':
+        return _callLogs.where((log) => log.callType == CallType.incoming).toList();
+      default:
+        return _callLogs;
+    }
+  }
+
+  String _formatDate(int? timestamp) {
+    if (timestamp == null) return 'Unknown';
+    final date = DateTime.fromMillisecondsSinceEpoch(timestamp);
+    return DateFormat('MMM dd, hh:mm a').format(date);
+  }
+
+  String _formatDuration(int? duration) {
+    if (duration == null || duration <= 0) return '0 sec';
+    final minutes = (duration / 60).floor();
+    final seconds = duration % 60;
+    if (minutes > 0) {
+      return '$minutes min ${seconds} sec';
+    }
+    return '$seconds sec';
+  }
+
+  String _getCallType(CallType? type) {
+    switch (type) {
+      case CallType.incoming:
+        return 'Incoming';
+      case CallType.outgoing:
+        return 'Outgoing';
+      case CallType.missed:
+        return 'Missed';
+      default:
+        return 'Unknown';
+    }
+  }
+
+  IconData _getCallTypeIcon(CallType? type) {
+    switch (type) {
+      case CallType.incoming:
+        return Icons.call_received;
+      case CallType.outgoing:
+        return Icons.call_made;
+      case CallType.missed:
+        return Icons.call_missed;
+      default:
+        return Icons.call;
+    }
+  }
+
+  Color _getCallTypeColor(CallType? type) {
+    switch (type) {
+      case CallType.missed:
+        return Colors.red;
+      case CallType.incoming:
+        return Colors.green;
+      case CallType.outgoing:
+        return Colors.blue;
+      default:
+        return Colors.grey;
+    }
   }
 
   void _onNav(int idx) {
@@ -159,51 +166,16 @@ Future<List<Map<String, dynamic>>> fetchTodaysUpcomingCalls() async {
     }
     setState(() => _selectedIndex = idx);
   }
-  
 
   @override
   Widget build(BuildContext context) {
-List<Map<String, dynamic>> displayedCalls;
-if (_currentTab == 'upcoming') {
-  displayedCalls = _upcoming;
-} else if (_currentTab == 'past') {
-  displayedCalls = _past;
-} else {
-  displayedCalls = [..._upcoming, ..._past]; // or use all fetched calls if needed
-}
-final List<Map<String, dynamic>> currentList = _selectedTab == 0
-    ? _upcoming
-    : _selectedTab == 1
-        ? _past
-        : [..._upcoming, ..._past]; // All = combine both
-
-final content = _isLoading
-    ? const Center(child: CircularProgressIndicator())
-    : currentList.isEmpty
-        ? Center(
-            child: Text(
-              _selectedTab == 0
-                  ? 'No upcoming calls'
-                  : _selectedTab == 1
-                      ? 'No past calls'
-                      : 'No calls found',
-            ),
-          )
-        : ListView(
-  controller: _scrollController,
-  children: currentList.map((c) => AppointmentCard(callData: c)).toList(),
-);
-
-
-
-
     return Scaffold(
-      backgroundColor: const Color(0xFFE8EAF6),
+      backgroundColor: const Color(0xFFF5F5F5),
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
         centerTitle: true,
-        title: const Text('Call Screen',
+        title: const Text('Call Logs',
             style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
       ),
       body: SafeArea(
@@ -211,42 +183,95 @@ final content = _isLoading
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Column(
             children: [
-              const SizedBox(height: 20),
-  Row(
-  children: [
-_TabButton(
-  text: 'Today',
-  isSelected: _selectedTab == 0,
-  onTap: () {
-    setState(() => _selectedTab = 0);
-    _scrollController.jumpTo(0); // scroll to top
-  },
-),
-
-    const SizedBox(width: 8),
-    const SizedBox(width: 8),
-_TabButton(
-  text: 'All Calls',
-  isSelected: _selectedTab == 2,
-  onTap: () {
-    setState(() => _selectedTab = 2);
-    _scrollController.jumpTo(0); // scroll to top
-  },
-),
-
-  ],
-),
-
-
               const SizedBox(height: 16),
-              Expanded(child: content),
+              // Filter tabs
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    _FilterTab(
+                      text: 'All',
+                      isSelected: _currentTab == 'all',
+                      onTap: () => setState(() => _currentTab = 'all'),
+                    ),
+                    const SizedBox(width: 8),
+                    _FilterTab(
+                      text: 'Missed',
+                      isSelected: _currentTab == 'missed',
+                      onTap: () => setState(() => _currentTab = 'missed'),
+                    ),
+                    const SizedBox(width: 8),
+                    _FilterTab(
+                      text: 'Outgoing',
+                      isSelected: _currentTab == 'outgoing',
+                      onTap: () => setState(() => _currentTab = 'outgoing'),
+                    ),
+                    const SizedBox(width: 8),
+                    _FilterTab(
+                      text: 'Incoming',
+                      isSelected: _currentTab == 'incoming',
+                      onTap: () => setState(() => _currentTab = 'incoming'),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              // Call logs list
+              Expanded(
+                child: _isLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : _permissionDenied
+                        ? Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Text('Permission to access call logs was denied'),
+                                const SizedBox(height: 16),
+                                ElevatedButton(
+                                  onPressed: () => openAppSettings(),
+                                  child: const Text('Open Settings'),
+                                ),
+                              ],
+                            ),
+                          )
+                        : _filteredCallLogs.isEmpty
+                            ? Center(
+                                child: Text(
+                                  'No ${_currentTab == 'all' ? '' : _currentTab} calls found',
+                                ),
+                              )
+                            : RefreshIndicator(
+                                onRefresh: _fetchCallLogs,
+                                child: ListView.builder(
+  controller: _scrollController,
+  itemCount: _filteredCallLogs.length,
+  itemBuilder: (context, index) {
+    final log = _filteredCallLogs[index];
+    // Create a consistent call ID - this should match how you save reminders
+    final callId = '${log.number}_${log.timestamp}'; 
+    final reminderData = _callReminders[callId];
+    
+    return CallLogCard(
+      name: log.name ?? 'Unknown',
+      number: log.number ?? 'Unknown',
+      date: _formatDate(log.timestamp),
+      duration: _formatDuration(log.duration),
+      callType: log.callType,
+      callTypeIcon: _getCallTypeIcon(log.callType),
+      callTypeColor: _getCallTypeColor(log.callType),
+      reminderData: reminderData,
+    );
+  },
+)
+                              ),
+              ),
             ],
           ),
         ),
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
-        selectedItemColor: const Color(0xFF00FFCB),
+        selectedItemColor: const Color(0xFF00BFA5),
         unselectedItemColor: Colors.grey,
         onTap: _onNav,
         items: const [
@@ -261,366 +286,292 @@ _TabButton(
   }
 }
 
-class _TabButton extends StatelessWidget {
+class _FilterTab extends StatelessWidget {
   final String text;
   final bool isSelected;
   final VoidCallback onTap;
-  const _TabButton(
-      {required this.text, required this.isSelected, required this.onTap});
+  const _FilterTab({
+    required this.text,
+    required this.isSelected,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          decoration: BoxDecoration(
-            color: isSelected ? Colors.black : Colors.white,
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: isSelected
-                ? const [
-                    BoxShadow(
-                        color: Colors.black12,
-                        blurRadius: 5,
-                        offset: Offset(0, 2))
-                  ]
-                : null,
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF00BFA5) : Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected ? Colors.transparent : Colors.grey.shade300,
           ),
-          alignment: Alignment.center,
-          child: Text(text,
-              style: TextStyle(
-                  color: isSelected ? Colors.white : Colors.black,
-                  fontWeight: FontWeight.bold)),
+          boxShadow: isSelected ? [
+            BoxShadow(
+              color: const Color(0xFF00BFA5).withOpacity(0.3),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            )
+          ] : null,
+        ),
+        child: Text(
+          text,
+          style: TextStyle(
+            color: isSelected ? Colors.white : Colors.black,
+            fontWeight: FontWeight.bold,
+          ),
         ),
       ),
     );
   }
 }
 
-class AppointmentCard extends StatefulWidget {
-  final Map<String, dynamic> callData;
-  const AppointmentCard({super.key, required this.callData});
+// In your CallLogCard widget (replace the existing one):
+class CallLogCard extends StatefulWidget {
+  final String name;
+  final String number;
+  final String date;
+  final String duration;
+  final CallType? callType;
+  final IconData callTypeIcon;
+  final Color callTypeColor;
+  final Map<String, dynamic>? reminderData;
+
+  const CallLogCard({
+    super.key,
+    required this.name,
+    required this.number,
+    required this.date,
+    required this.duration,
+    required this.callType,
+    required this.callTypeIcon,
+    required this.callTypeColor,
+    this.reminderData,
+  });
 
   @override
-  State<AppointmentCard> createState() => _AppointmentCardState();
+  State<CallLogCard> createState() => _CallLogCardState();
 }
 
-class _AppointmentCardState extends State<AppointmentCard> {
-  // late final ScrollController _scrollController;
-  late final TextEditingController _remarksCtrl;
-  Map<String, dynamic> _call;
-  DateTime? _reminderUtc;
-  bool _updating = false;
-  late final String _callId;
-  bool _hasFetchedDetails = false;
-  bool _expanded = false;
-
-  
-
-
-  late final ScrollController _scrollController;
-
-
-
-
-  _AppointmentCardState() : _call = const {};
-
-  String formatDuration(int seconds) {
-    final duration = Duration(seconds: seconds);
-    String twoDigits(int n) => n.toString().padLeft(2, '0');
-    final hours = twoDigits(duration.inHours);
-    final minutes = twoDigits(duration.inMinutes.remainder(60));
-    final secs = twoDigits(duration.inSeconds.remainder(60));
-    return "$hours:$minutes:$secs";
-  }
+class _CallLogCardState extends State<CallLogCard> {
+  Timer? _timer;
+  Duration? _timeRemaining;
+  bool _isPast = false;
+  String _formattedReminderTime = '';
 
   @override
   void initState() {
     super.initState();
-    _call = widget.callData;
-    _callId = _call['_id'];
-       _scrollController = ScrollController(); 
-    _remarksCtrl = TextEditingController(text: _call['remarks'] ?? '');
+    _initializeReminderData();
   }
 
-@override
-void didChangeDependencies() {
-  super.didChangeDependencies();
-  if (!_hasFetchedDetails) {
-    _hasFetchedDetails = true;
-  }
-}
-
-
-  //fetch today upcoming calls
-
-  Future<void> _updateCall() async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('token');
-    if (token == null) return;
-
-    final uri = Uri.parse('https://api.callman.in/api/user/call/$_callId');
-
-    final body = {
-      'remarks': _remarksCtrl.text,
-      'reminder': _reminderUtc?.toIso8601String()
-    };
-
-    setState(() => _updating = true);
-
-    final res = await http.put(
-      uri,
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
-      body: jsonEncode(body),
-    );
-    print(res.statusCode);
-    print(res.body);
-
-    setState(() => _updating = false);
-
-    if (res.statusCode == 200) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Call updated successfully')),
+  void _initializeReminderData() {
+    if (widget.reminderData != null && widget.reminderData!['reminderTime'] != null) {
+      final reminderTime = DateTime.fromMillisecondsSinceEpoch(
+        widget.reminderData!['reminderTime'] as int
       );
-      _refreshCard(); // Refresh with updated data
-    } else {
-      debugPrint('❌ update $_callId → ${res.statusCode}');
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to update call')),
-      );
+      _formattedReminderTime = DateFormat('EEE MMM d HH:mm:ss yyyy').format(reminderTime);
+      debugPrint("⏰ Reminder found for: $_formattedReminderTime");
+      
+      _updateRemainingTime();
+      _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+        _updateRemainingTime();
+      });
     }
   }
 
-Future<void> _refreshCard() async {
-  final prefs = await SharedPreferences.getInstance();
-  final token = prefs.getString('token');
-  if (token == null) return;
-
-  if (!mounted) return; // 👈 Safe check before setState
-  setState(() => _updating = true);
-
-  final res = await http.get(
-    Uri.parse('https://api.callman.in/api/user/call/$_callId'),
-    headers: {'Authorization': 'Bearer $token'},
-  );
-
-  if (!mounted) return;
-
-  if (res.statusCode == 200) {
-    final data = jsonDecode(res.body)['call'];
-    _remarksCtrl.text = data['remarks'] ?? '';
-    _reminderUtc = data['reminder'] != null
-        ? DateTime.parse(data['reminder']).toUtc()
-        : null;
-
-    if (!mounted) return; // 👈 check again before next setState
-    setState(() {
-      _call = data;
-      _updating = false;
-    });
-  } else {
-    debugPrint('❌ fetch $_callId → ${res.statusCode}');
-    if (!mounted) return; // 👈 final safety check
-    setState(() => _updating = false);
-  }
-}
-
-
-  /// ✅ Helper to filter and sort today's calls
-
-  Future<void> _pickReminder() async {
+  void _updateRemainingTime() {
+    if (widget.reminderData == null || widget.reminderData!['reminderTime'] == null) return;
+    
+    final reminderTime = DateTime.fromMillisecondsSinceEpoch(
+      widget.reminderData!['reminderTime'] as int
+    );
     final now = DateTime.now();
-    final d = await showDatePicker(
-      context: context,
-      initialDate: now,
-      firstDate: now.subtract(const Duration(days: 365)),
-      lastDate: now.add(const Duration(days: 365)),
-    );
-    if (d == null) return;
+    final difference = reminderTime.difference(now);
+    
+    setState(() {
+      _timeRemaining = difference;
+      _isPast = difference.isNegative;
+    });
+  }
 
-    final t = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay.fromDateTime(now),
-    );
-    if (t == null) return;
-
-    final dt = DateTime(d.year, d.month, d.day, t.hour, t.minute).toUtc();
-    setState(() => _reminderUtc = dt);
+  String _formatRemainingTime() {
+    if (_timeRemaining == null) return '';
+    
+    if (_isPast) {
+      return 'Was due on ${DateFormat('MMM dd, hh:mm a').format(
+        DateTime.fromMillisecondsSinceEpoch(widget.reminderData!['reminderTime'] as int)
+      )
+      }';
+    }
+    
+    final duration = _timeRemaining!;
+    if (duration.inDays > 0) {
+      return 'Due in ${duration.inDays}d ${duration.inHours.remainder(24)}h';
+    } else if (duration.inHours > 0) {
+      return 'Due in ${duration.inHours}h ${duration.inMinutes.remainder(60)}m';
+    } else if (duration.inMinutes > 0) {
+      return 'Due in ${duration.inMinutes}m';
+    } else {
+      return 'Due in ${duration.inSeconds}s';
+    }
   }
 
   @override
   void dispose() {
-    _remarksCtrl.dispose();
-    _scrollController.dispose();
+    _timer?.cancel();
+    debugPrint("Disposing timer for reminder card");
     super.dispose();
   }
 
-  String _fmtIso(String iso) {
-    final dt = DateTime.tryParse(iso)?.toLocal();
-    return dt == null ? '-' : DateFormat('d MMM yyyy, h:mm a').format(dt);
-  }
-
-  String _fmtUtc(DateTime? dt) =>
-      dt == null ? 'Tap to set' : DateFormat('d MMM yyyy, h:mm a').format(dt);
-
   @override
   Widget build(BuildContext context) {
-    final c = _call;
-    // final durationMin = ((c['callDuration'] ?? 0) / 60).ceil();
-    final callType = (c['callType'] ?? 0) == 0 ? 'Outgoing' : 'Incoming';
-
-    return GestureDetector(
-  onTap: () {
-    setState(() {
-      _expanded = !_expanded;
-    });
-  },
-  child: AnimatedContainer(
-    duration: const Duration(milliseconds: 200),
-    margin: const EdgeInsets.only(bottom: 12),
-    padding: const EdgeInsets.all(16),
-    decoration: BoxDecoration(
-      color: const Color(0xFF00FFDA),
-      borderRadius: BorderRadius.circular(16),
-      boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10)],
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Header row
-        Row(
+    final hasReminder = widget.reminderData != null;
+    final isMIUI = Theme.of(context).platform == TargetPlatform.android;
+    
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+      elevation: isMIUI ? 1 : 2, // Adjust for MIUI devices
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              child: Text(
-                _fmtIso(c['callStartDate'] ?? ''),
-                style: const TextStyle(
-                    fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-            ),
-            if (_updating)
-              const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-          ],
-        ),
-        const SizedBox(height: 8),
-
-        // Name & Number
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            RichText(
-              text: TextSpan(
-                style: const TextStyle(color: Colors.black, fontSize: 14),
-                children: [
-                  TextSpan(
-                      text: '${c['callerName']}\n',
-                      style: const TextStyle(
-                          fontWeight: FontWeight.bold, fontSize: 16)),
-                  TextSpan(text: '${c['callerNumber']}'),
-                ],
-              ),
-            ),
-            const Icon(Icons.phone, color: Colors.black),
-          ],
-        ),
-        const SizedBox(height: 8),
-
-        // Duration & Type
-        Row(
-          children: [
-            const Icon(Icons.timer, size: 16),
-            const SizedBox(width: 4),
-            Text(formatDuration(c['callDuration'] ?? 0)),
-            const Spacer(),
-            const Icon(Icons.info_outline, size: 16),
-            const SizedBox(width: 4),
-            Text(callType),
-          ],
-        ),
-
-        // 🔽 Expanded content
-        if (_expanded) ...[
-          const SizedBox(height: 16),
-
-          const Text('Remarks:',
-              style: TextStyle(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _remarksCtrl,
-            maxLines: 2,
-            decoration: InputDecoration(
-              hintText: 'Enter remarks…',
-              filled: true,
-              fillColor: Colors.white,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide.none,
-              ),
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          const Text('Reminder:',
-              style: TextStyle(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          GestureDetector(
-            onTap: _pickReminder,
-            child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey.shade400),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.calendar_today,
-                      size: 16, color: Colors.black54),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      _fmtUtc(_reminderUtc),
-                      style: const TextStyle(fontSize: 14),
+            // Caller info row
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    widget.name,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
                     ),
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  const Icon(Icons.edit, size: 16, color: Colors.black54),
-                ],
+                ),
+                Icon(
+                  widget.callTypeIcon,
+                  color: widget.callTypeColor,
+                  size: 20,
+                ),
+              ],
+            ),
+            
+            // Phone number
+            const SizedBox(height: 6),
+            Text(
+              widget.number,
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey[700],
               ),
             ),
-          ),
-          const SizedBox(height: 16),
-
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: _updating ? null : _updateCall,
-              icon: const Icon(Icons.save),
-              label: const Text('Save'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.black,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+            
+            // Call date and duration
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      Icons.access_time,
+                      size: 16,
+                      color: Colors.grey[600],
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      widget.date,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                  ],
+                ),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.timer,
+                      size: 16,
+                      color: Colors.grey[600],
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      widget.duration,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            
+            // Reminder section
+            if (hasReminder) ...[
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: _isPast ? Colors.red[50] : Colors.blue[50],
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: _isPast ? Colors.red[100]! : Colors.blue[100]!,
+                    width: 1,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.alarm,
+                      size: 16,
+                      color: _isPast ? Colors.red[600] : Colors.blue[600],
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            widget.reminderData?['remarks'] ?? 'Call reminder',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: _isPast ? Colors.red[600] : Colors.blue[600],
+                            ),
+                          ),
+                          Text(
+                            _formatRemainingTime(),
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: _isPast ? Colors.red[600] : Colors.blue[600],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (_isPast)
+                      Icon(
+                        Icons.warning_amber_rounded,
+                        size: 16,
+                        color: Colors.red[600],
+                      ),
+                  ],
                 ),
               ),
-            ),
-          ),
-        ]
-      ],
-    ),
-  ),
-);
-  
+            ],
+          ],
+        ),
+      ),
+    );
   }
 }

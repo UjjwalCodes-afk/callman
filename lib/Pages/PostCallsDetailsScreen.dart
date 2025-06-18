@@ -355,11 +355,13 @@ class _PostCallDetailsCardState extends State<PostCallDetailsCard> {
     if (date != null) {
       final time = await showTimePicker(
         context: context,
-        initialTime: TimeOfDay.fromDateTime(now.add(const Duration(minutes: 1))),
+        initialTime:
+            TimeOfDay.fromDateTime(now.add(const Duration(minutes: 1))),
       );
       if (time != null) {
         setState(() {
-          _selectedDate = DateTime(date.year, date.month, date.day, time.hour, time.minute);
+          _selectedDate =
+              DateTime(date.year, date.month, date.day, time.hour, time.minute);
         });
       }
     }
@@ -392,6 +394,20 @@ class _PostCallDetailsCardState extends State<PostCallDetailsCard> {
       );
 
       if (response.statusCode == 200) {
+        final prefs = await SharedPreferences.getInstance();
+        final reminders = prefs.getStringList('call_reminders') ?? [];
+        reminders.add(jsonEncode({
+          'callId': _callId,
+          'remarks': remarks,
+          'reminderTime': _selectedDate!.millisecondsSinceEpoch,
+          'phoneNumber': '', // You might want to store the number too
+        }));
+        await prefs.setStringList('call_reminders', reminders);
+            debugPrint('✅ Saved reminder to SharedPreferences:');
+      debugPrint('Call ID: $_callId');
+      debugPrint('Remarks: $remarks');
+      debugPrint('Time: ${_selectedDate!.toIso8601String()}');
+      debugPrint('All stored reminders: ${prefs.getStringList('call_reminders')}');
         await NativeReminder.scheduleReminder(
           id: DateTime.now().millisecondsSinceEpoch ~/ 1000,
           title: "Reminder",
@@ -472,7 +488,8 @@ class _PostCallDetailsCardState extends State<PostCallDetailsCard> {
                 icon: const Icon(Icons.calendar_today),
                 label: Text(dateTimeText),
                 style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
                 ),
               ),
               const SizedBox(height: 20),

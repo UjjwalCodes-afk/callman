@@ -809,7 +809,7 @@ Future<String?> getContactNameByNumber(String number) async {
     for (final phone in contact.phones) {
       final stored = normalizeNumber(phone.number);
       if (stored == inputNumber) {
-        return contact.displayName;
+        return contact.displayName.isNotEmpty ? contact.displayName : 'Guest';
       }
     }
   }
