@@ -1,4 +1,5 @@
 
+import 'package:callman/Dashboard/Dashboard.dart';
 import 'package:callman/Pages/DialPad.dart';
 import 'package:callman/Pages/HomePage.dart';
 import 'package:callman/Pages/Login.dart';
@@ -176,10 +177,7 @@ Navigator.push(
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => Wallet(
-          email: widget.email,
-          userName: widget.userName,
-        ),
+        builder: (_) => DashboardScreen(),
       ),
     );
     
@@ -424,7 +422,7 @@ Row(
           BottomNavigationBarItem(icon: Icon(Icons.home), label: "Home"),
           BottomNavigationBarItem(icon: Icon(Icons.call_missed_outgoing), label: "Settings"),
           BottomNavigationBarItem(icon: Icon(Icons.call), label: "Shop"),
-          BottomNavigationBarItem(icon: Icon(Icons.wallet), label: "Wallet"),
+          BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: "Wallet"),
           //  BottomNavigationBarItem(icon: Icon(Icons.call), label: "Call"),
         ],
       ),

@@ -1,9 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:call_log/call_log.dart';
+import 'package:callman/Dashboard/Dashboard.dart';
 import 'package:callman/Pages/DialPad.dart';
 import 'package:callman/Pages/DoctorHome.dart';
-import 'package:callman/Pages/Settings.dart';
+// import 'package:callman/Pages/Settings.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -159,7 +160,7 @@ Future<void> _loadReminders() async {
       target = DoctorHomeScreen(email: widget.email, userName: widget.userName);
     if (idx == 2) target = const DialPadScreen();
     if (idx == 3)
-      target = Wallet(email: widget.email, userName: widget.userName);
+      target = DashboardScreen();
     if (target != null) {
       Navigator.pushReplacement(
           context, MaterialPageRoute(builder: (_) => target!));
@@ -279,7 +280,7 @@ Future<void> _loadReminders() async {
           BottomNavigationBarItem(
               icon: Icon(Icons.call_missed_outgoing), label: 'Settings'),
           BottomNavigationBarItem(icon: Icon(Icons.call), label: 'Call'),
-          BottomNavigationBarItem(icon: Icon(Icons.wallet), label: 'Wallet'),
+          BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: 'Wallet'),
         ],
       ),
     );
