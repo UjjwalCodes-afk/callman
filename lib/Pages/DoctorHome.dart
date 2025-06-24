@@ -1,11 +1,11 @@
 
+import 'package:callman/Dashboard/Dashboard.dart';
 import 'package:callman/Pages/DialPad.dart';
-import 'package:callman/Pages/HomePage.dart';
 import 'package:callman/Pages/Login.dart';
 import 'package:callman/Pages/Notifications.dart';
 import 'package:callman/Pages/UserInformation.dart';
 // import 'package:callman/Pages/Shop.dart';
-import 'package:callman/Pages/Wallet.dart';
+
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -155,10 +155,8 @@ void _onItemTapped(int index) {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => AppointmentScreen(
-          email: widget.email,
-          userName: widget.userName,
-        ),
+        builder: (_) => DashboardScreen(userName: widget.userName
+        , email: widget.email)
       ),
     );
   } else if (index == 2) {
@@ -176,10 +174,7 @@ Navigator.push(
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => Wallet(
-          email: widget.email,
-          userName: widget.userName,
-        ),
+        builder: (_) => DashboardScreen(userName: widget.userName, email: widget.email,),
       ),
     );
     
@@ -188,7 +183,7 @@ Navigator.push(
   Navigator.push(
     context,
     MaterialPageRoute(
-      builder: (_) => DialPadScreen()
+      builder: (_) => DialPadScreen(userName: widget.userName, email: widget.email,)
     ),
   );
 }
@@ -424,7 +419,7 @@ Row(
           BottomNavigationBarItem(icon: Icon(Icons.home), label: "Home"),
           BottomNavigationBarItem(icon: Icon(Icons.call_missed_outgoing), label: "Settings"),
           BottomNavigationBarItem(icon: Icon(Icons.call), label: "Shop"),
-          BottomNavigationBarItem(icon: Icon(Icons.wallet), label: "Wallet"),
+          // BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: "Wallet"),
           //  BottomNavigationBarItem(icon: Icon(Icons.call), label: "Call"),
         ],
       ),

@@ -1165,7 +1165,9 @@ Future<void> _makeCall() async {
       appBar: AppBar(
         backgroundColor: Colors.black,
         leading: IconButton(
-          onPressed: () => Navigator.pop(context),
+          onPressed: () {
+  Navigator.pop(context); // Returning control
+},
           icon: const Icon(Icons.arrow_back, color: Colors.white),
         ),
       ),
@@ -1228,6 +1230,5 @@ Future<void> _makeCall() async {
     );
   }
 }
-
 
 
