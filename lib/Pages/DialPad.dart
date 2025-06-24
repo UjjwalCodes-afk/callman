@@ -528,6 +528,7 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:callman/Pages/PostCallsDetailsScreen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -542,11 +543,11 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:phone_state/phone_state.dart';
 import 'package:call_log/call_log.dart';
-import 'package:android_intent_plus/android_intent.dart';
+// import 'package:android_intent_plus/android_intent.dart';
 // import 'package:contacts_service/contacts_service.dart';
 
 
-import 'Interaction.dart';
+
 // import 'PostCallsDetailsScreen.dart';
 // import 'package:flutter_callkit_incoming/flutter_callkit_incoming.dart';
 
@@ -569,39 +570,10 @@ class _DialPadScreenState extends State<DialPadScreen> {
   StreamSubscription<PhoneState>? _phoneStateSubscription;
   bool _callStarted = false;
   DateTime? _callConnectedTime;
-  bool _recordCall = false;
-  String? _recordedFilePath; // 🔹 to save recorded file path
+  
 
-  static const overlayChannel = MethodChannel('overlay_channel');
 
-Future<void> showOverlay(String name, String number) async {
-  try {
-    if (name.trim().isEmpty || number.trim().isEmpty) {
-      debugPrint("❌ Overlay not shown – Missing name or number");
-      return;
-    }
 
-    final normalizedNumber = normalizeNumber(number);
-    debugPrint("📲 Sending to Overlay → Name: $name | Number: $normalizedNumber");
-
-    await overlayChannel.invokeMethod('showOverlay', {
-      'callerName': name,
-      'callerNumber': normalizedNumber,
-    });
-  } on PlatformException catch (e) {
-    debugPrint("Failed to show overlay: '${e.message}'");
-  }
-}
-
-Future<void> checkOverlayPermission() async {
-  if (!await Permission.systemAlertWindow.isGranted) {
-    final intent = AndroidIntent(
-      action: 'android.settings.action.MANAGE_OVERLAY_PERMISSION',
-      data: 'package:com.example.callman', // ✅ FIXED
-    );
-    await intent.launch();
-  }
-}
 Future<String?> _getNameFromCallLog(String targetNumber) async {
   final Iterable<CallLogEntry> entries = await CallLog.get();
   final normalizedTarget = normalizeNumber(targetNumber);
@@ -619,100 +591,47 @@ Future<String?> _getNameFromCallLog(String targetNumber) async {
 }
 
 Future<void> _showInteractionPopupAndCall() async {
-  if (phoneNumber.isEmpty) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Please enter a phone number")),
-    );
-    return;
-  }
+  if (phoneNumber.isEmpty || !mounted) return;
 
-  debugPrint("Dialing number: $phoneNumber");
+  try {
+    debugPrint("Dialing number: $phoneNumber");
 
-  final interactionData = await _fetchLastInteraction(phoneNumber);
-  final callLogName = await _getNameFromCallLog(phoneNumber);
-  final contactName = await getContactNameByNumber(phoneNumber);
-  final displayName = callLogName ?? contactName ?? "Guest";
+    final interactionData = await _fetchLastInteraction(phoneNumber);
+    // Removed unused displayName declaration
 
-  if (!mounted) return;
+    if (!mounted) return;
 
-  debugPrint("✅ Showing overlay with name: $displayName, number: $phoneNumber");
-
-  // ✅ Show overlay first
-  await showOverlay(displayName, phoneNumber);
-
-  // ✅ Show interaction popup
-  await showGeneralDialog(
-    context: context,
-    barrierDismissible: false,
-    barrierColor: Colors.transparent,
-    transitionDuration: const Duration(milliseconds: 300),
-    pageBuilder: (context, anim1, anim2) {
-      final screenWidth = MediaQuery.of(context).size.width;
-      return SafeArea(
-        child: Align(
-          alignment: Alignment.topCenter,
-          child: Material(
-            color: Colors.transparent,
-            child: Stack(
-              children: [
-                Container(
-                  width: screenWidth,
-                  margin: const EdgeInsets.only(top: 16),
-                  padding: const EdgeInsets.all(16),
-                  decoration: const BoxDecoration(
-                    color: Colors.black87,
-                    borderRadius: BorderRadius.vertical(
-                      bottom: Radius.circular(16),
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black45,
-                        blurRadius: 10,
-                        offset: Offset(0, 4),
-                      ),
-                    ],
-                  ),
-             child: InteractionScreen(
-                    data: interactionData ?? {},
-                    onCall: () async {
-                      await _makeCall();           // Start call
-                    },
-                  ),
-                )
-              ],
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: Colors.black87,
+          // content: InteractionScreen(
+          //   data: interactionData ?? {},
+          //   onCall: _makeCall,
+          // ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel', style: TextStyle(color: Colors.white)),
             ),
-          ),
-        ),
+          ],
+        );
+      },
+    );
+  } catch (e) {
+    debugPrint('Interaction popup error: $e');
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: ${e.toString()}')),
       );
-    },
-  );
-
-  // ✅ Make the call *only once*
-  // await _makeCall();
+    }
+  }
 }
 
 
-// Future<List<String>> _getLastCallDetails() async {
-//   final status = await Permission.phone.request();
-//   if (!status.isGranted) return ["Unknown", "Unknown"];
 
-//   final Iterable<CallLogEntry> entries = await CallLog.get();
-
-//   // 🔍 Get most recent outgoing call
-//   CallLogEntry? lastOutgoing = entries.firstWhere(
-//     (entry) => entry.callType == CallType.outgoing && entry.number != null,
-//     orElse: () => CallLogEntry.fromMap({}),
-//   );
-
-//   if (lastOutgoing.number == null) {
-//     return ["Unknown", "Unknown"];
-//   }
-
-//   final number = lastOutgoing.number!;
-//   final name = await getContactNameByNumber(number) ?? "Unknown";
-
-//   return [name, number];
-// }
 
 void debugPrintContacts() async {
   final contacts = await FlutterContacts.getContacts(withProperties: true);
@@ -790,13 +709,17 @@ debugPrint("Request Body: $body");
 @override
 void initState() {
   super.initState();
-  checkOverlayPermission();
-  debugPrintContacts();
-  _requestContactPermission();
-  _askRuntimePermissions();
-  _listenToPhoneState();
-  
+  WidgetsBinding.instance.addPostFrameCallback((_) async{
+    await _askRuntimePermissions(); // Wait for permission first
+    if (!mounted) return;
+    // checkOverlayPermission();
+    debugPrintContacts();
+    _requestContactPermission();
+    
+    _listenToPhoneState();
+  });
 }
+
 
 Future<String?> getContactNameByNumber(String number) async {
   final hasPermission = await FlutterContacts.requestPermission();
@@ -818,51 +741,28 @@ Future<String?> getContactNameByNumber(String number) async {
 }
 
 Future<void> _askRuntimePermissions() async {
-  final statuses = await [
-    Permission.phone,
-    Permission.microphone,
-    Permission.contacts,           // ⬅️ Needed for caller name
-    Permission.phone,           // ⬅️ Needed to fetch call duration & logs
-    Permission.storage,
-    Permission.manageExternalStorage,
-    Permission.systemAlertWindow,  // ⬅️ Overlay permission
-  ].request();
-
-  if (statuses[Permission.microphone]?.isDenied == true ||
-      statuses[Permission.storage]?.isDenied == true) {
-    debugPrint('🔴 Mic / Storage permission denied – recording will not work');
-  }
-
-  if (statuses[Permission.systemAlertWindow]?.isDenied == true) {
-    debugPrint('🔴 Overlay permission is required to show floating views.');
-    final intent = AndroidIntent(
-      action: 'android.settings.action.MANAGE_OVERLAY_PERMISSION',
-      data: 'package:com.example.callman',
-    );
-    await intent.launch();
-  }
-}
-
-  static const platform = MethodChannel('com.yourapp.call_recorder');
-
-Future<void> startRecording() async {
   try {
-    await platform.invokeMethod('startRecording');
-  } on PlatformException catch (e) {
-    debugPrint("Failed to start recording: '${e.message}'.");
+    final statuses = await [
+      Permission.contacts,
+      Permission.phone,
+      Permission.storage,
+      if (Platform.isAndroid )
+        Permission.manageExternalStorage,
+    ].request();
+
+    if (!statuses[Permission.phone]!.isGranted) {
+      debugPrint('Phone permission denied');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Phone permission is required for calling')),
+        );
+      }
+    }
+  } catch (e) {
+    debugPrint('Permission error: $e');
   }
 }
 
-Future<String?> stopRecording() async {
-  try {
-    final path = await platform.invokeMethod<String>('stopRecording');
-    debugPrint('Recording stopped.');
-    return path;
-  } on PlatformException catch (e) {
-    debugPrint("Failed to stop recording: '${e.message}'.");
-    return null;
-  }
-}
 
 Future<int?> getCallDuration(String phoneNumber) async {
   final Iterable<CallLogEntry> entries = await CallLog.get();
@@ -888,46 +788,54 @@ Future<int?> getCallDuration(String phoneNumber) async {
     super.dispose();
   }
 
-  void _listenToPhoneState() async {
-  var status = await Permission.phone.status;
-  if (!status.isGranted) {
-    status = await Permission.phone.request();
+void _listenToPhoneState() async {
+  try {
+    var status = await Permission.phone.status;
+    if (!status.isGranted) {
+      status = await Permission.phone.request();
+      if (!status.isGranted) return;
+    }
+
+    _phoneStateSubscription?.cancel(); // Cancel existing subscription
+    _phoneStateSubscription = PhoneState.stream.listen((PhoneState event) async {
+      debugPrint("Phone state changed: ${event.status}");
+
+      if (event.status == PhoneStateStatus.CALL_STARTED && !_callStarted) {
+        _callStarted = true;
+        _callConnectedTime = DateTime.now();
+        if (!_callDataSent) {
+          await _sendCallData();
+        }
+      }
+
+      if (event.status == PhoneStateStatus.CALL_ENDED && _callStarted) {
+        _callStarted = false;
+        int? duration;
+
+        if (_callConnectedTime != null) {
+          duration = DateTime.now().difference(_callConnectedTime!).inSeconds;
+          debugPrint("Call duration: $duration seconds");
+        }
+
+        await _sendCallEndData(duration);
+
+        if (mounted) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _showReminderRemarksForm(context);
+          });
+        }
+
+        _callConnectedTime = null;
+      }
+    });
+  } catch (e) {
+    debugPrint('Phone state listener error: $e');
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error monitoring call state: ${e.toString()}')),
+      );
+    }
   }
-
-  if (!status.isGranted) return;
-
-  _phoneStateSubscription = PhoneState.stream.listen((PhoneState event) async {
-    debugPrint("Phone state changed: ${event.status}");
-
-    if (event.status == PhoneStateStatus.CALL_STARTED && !_callStarted) {
-      _callStarted = true;
-      _callConnectedTime = DateTime.now();
-      await _sendCallData();
-    }
-
-    if (event.status == PhoneStateStatus.CALL_ENDED && _callStarted) {
-      if (_recordCall) {
-        _recordedFilePath = await stopRecording(); // Capture file path
-        debugPrint('🎙 Recording saved at $_recordedFilePath');
-      }
-
-      _callStarted = false;
-
-      if (_callConnectedTime != null) {
-        final duration = DateTime.now().difference(_callConnectedTime!).inSeconds;
-        debugPrint("Call duration: $duration seconds");
-      }
-
-      await _sendCallEndData();
-
-      // Show the form dialog for reminder and remarks
-      if (mounted) {
-        _showReminderRemarksForm(context);
-      }
-
-      _callConnectedTime = null;
-    }
-  });
 }
   //show reminder remarks form
 Future<void> _showReminderRemarksForm(BuildContext context) async {
@@ -952,19 +860,20 @@ pageBuilder: (_, __, ___) {
 }
 
 
-  void _addDigit(String digit) {
+void _addDigit(String digit) {
+  if (!mounted) return;
+  setState(() {
+    phoneNumber += digit;
+  });
+}
+
+void _deleteDigit() {
+  if (phoneNumber.isNotEmpty && mounted) {
     setState(() {
-      phoneNumber += digit;
+      phoneNumber = phoneNumber.substring(0, phoneNumber.length - 1);
     });
   }
-
-  void _deleteDigit() {
-    if (phoneNumber.isNotEmpty) {
-      setState(() {
-        phoneNumber = phoneNumber.substring(0, phoneNumber.length - 1);
-      });
-    }
-  }
+}
 
 Future<void> _sendCallData() async {
   if (_callDataSent) return; // ✅ Already sent
@@ -1070,61 +979,38 @@ void _resetCallState() {
   _callConnectedTime = null;
   _callId = null;
   _callDataSent = false;
-  _recordCall = false;
+
 }
-
-
-
 
 Future<void> _makeCall() async {
-  if (phoneNumber.isEmpty) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Please enter a phone number")),
-    );
-    return;
-  }
+  if (phoneNumber.isEmpty || !mounted) return;
 
-  _recordCall = false;
-
-  var status = await Permission.phone.status;
-  if (!status.isGranted) {
-    status = await Permission.phone.request();
-  }
-
-  if (status.isGranted) {
-    if (_recordCall) {
-      await startRecording();
+  try {
+    var status = await Permission.phone.status;
+    if (!status.isGranted) {
+      status = await Permission.phone.request();
+      if (!status.isGranted) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Phone permission required')),
+          );
+        }
+        return;
+      }
     }
 
-    // ✅ REMOVE this line ↓↓↓
-    // await FlutterCallkitIncoming.showCallkitIncoming(...);
-
-    await Future.delayed(const Duration(seconds: 1));
-
-    // 🔥 Make the actual call
-    await FlutterPhoneDirectCaller.callNumber(phoneNumber);
+    await Future.delayed(const Duration(milliseconds: 300));
+    final result = await FlutterPhoneDirectCaller.callNumber(phoneNumber);
+    debugPrint('Call result: $result');
+  } catch (e) {
+    debugPrint('Call error: $e');
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to make call: ${e.toString()}')),
+      );
+    }
   }
 }
-
-
-
-
-  // void _showCallingAlert() {
-  //   showDialog(
-  //     context: context,
-  //     builder: (context) => AlertDialog(
-  //       backgroundColor: Colors.black,
-  //       content: Text(
-  //         'Calling as ${widget.userName ?? "Guest"}',
-  //         style: const TextStyle(fontSize: 18, color: Colors.white),
-  //       ),
-  //     ),
-  //   );
-
-  //   Future.delayed(const Duration(seconds: 1), () {
-  //     Navigator.of(context).pop();
-  //   });
-  // }
 
   Widget _buildDialButton(String label) {
     return Material(

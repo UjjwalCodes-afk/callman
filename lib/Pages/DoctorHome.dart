@@ -5,8 +5,9 @@ import 'package:callman/Pages/HomePage.dart';
 import 'package:callman/Pages/Login.dart';
 import 'package:callman/Pages/Notifications.dart';
 import 'package:callman/Pages/UserInformation.dart';
+import 'package:callman/Pages/dialpad2.dart';
 // import 'package:callman/Pages/Shop.dart';
-import 'package:callman/Pages/Wallet.dart';
+// import 'package:callman/Pages/Wallet.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -166,10 +167,7 @@ void _onItemTapped(int index) {
 Navigator.push(
   context,
   MaterialPageRoute(
-    builder: (_) => DialPadScreen(
-      userName: widget.userName,
-      email: widget.email,
-    ),
+    builder: (_) => DialPadScreen1()
   ),
 );
 
@@ -177,7 +175,7 @@ Navigator.push(
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => DashboardScreen(),
+        builder: (_) => DashboardScreen(userName: widget.userName, email: widget.email),
       ),
     );
     

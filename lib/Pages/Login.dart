@@ -1,7 +1,8 @@
 
 
 
-import 'package:callman/Pages/DoctorHome.dart';
+import 'package:callman/Dashboard/Dashboard.dart';
+
 import 'package:shared_preferences/shared_preferences.dart'; 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -56,6 +57,7 @@ class _LoginPageState extends State<LoginPage> {
       final user = data['user'];
       final token = user['token'];
       final name = user['name'] ?? 'Guest';
+      userName = name;
       final email = user['email'] ?? '';
       final mobile = user['mobile'].toString();
       final companyName = user['companyName'] ?? '';
@@ -92,10 +94,7 @@ class _LoginPageState extends State<LoginPage> {
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => DoctorHomeScreen(
-            email: email,
-            userName: name,
-          ),
+          builder: (context) => DashboardScreen(userName: userName, email: email)
         ),
       );
     } else {

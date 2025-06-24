@@ -1,147 +1,173 @@
 import 'package:flutter/material.dart';
+import 'package:call_log/call_log.dart';
 import 'package:intl/intl.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:url_launcher/url_launcher.dart';
 
-class InteractionScreen extends StatelessWidget {
-  final Map<String, dynamic>? data; // Passed data from the API response
-  final VoidCallback onCall;        // <-- NEW callback to trigger call
 
-  const InteractionScreen({Key? key, this.data, required this.onCall}) : super(key: key);
+class InteractionScreen extends StatefulWidget {
+  final String phoneNumber;
+  final String callerName;
+
+  const InteractionScreen({
+    Key? key,
+    required this.phoneNumber,
+    required this.callerName,
+  }) : super(key: key);
+
+  @override
+  State<InteractionScreen> createState() => _InteractionScreenState();
+}
+
+class _InteractionScreenState extends State<InteractionScreen> {
+  CallLogEntry? lastCall;
+
+  @override
+  void initState() {
+    super.initState();
+    fetchLastInteraction();
+  }
+
+  Future<void> fetchLastInteraction() async {
+    final status = await Permission.phone.request();
+    final callLogStatus = await Permission.phone.status;
+
+    if (status.isGranted && callLogStatus.isGranted) {
+      final Iterable<CallLogEntry> entries = await CallLog.query(
+        number: widget.phoneNumber,
+      );
+
+      if (entries.isNotEmpty) {
+        setState(() {
+          lastCall = entries.first;
+        });
+      }
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Phone permission denied')),
+      );
+    }
+  }
+
+  String formatDate(DateTime? date) {
+    if (date == null) return 'N/A';
+    return DateFormat('hh:mm a, dd MMM').format(date);
+  }
+
+String getCallType(int? callTypeValue) {
+  if (callTypeValue == null) return 'Unknown';
+
+  // Try to safely convert int to CallType enum
+  final callType = CallType.values.asMap().containsKey(callTypeValue)
+      ? CallType.values[callTypeValue]
+      : null;
+
+  switch (callType) {
+    case CallType.incoming:
+      return 'Incoming';
+    case CallType.outgoing:
+      return 'Outgoing';
+    case CallType.missed:
+      return 'Missed';
+    case CallType.rejected:
+      return 'Rejected';
+    case CallType.blocked:
+      return 'Blocked';
+    case CallType.voiceMail:
+      return 'Voicemail';
+    default:
+      return 'Unknown';
+  }
+}
 
   @override
   Widget build(BuildContext context) {
-    final callerName = data?['callerName'];
-    String resolvedCallerName;
+    final call = lastCall;
 
-    if (callerName is String) {
-      resolvedCallerName = callerName;
-    } else if (callerName is Map<String, dynamic> && callerName['name'] is String) {
-      resolvedCallerName = callerName['name'];
-    } else {
-      resolvedCallerName = 'Unknown';
-    }
-
-    final call = data?['call'];
-    final callDuration = call?['callDuration'] is int ? call['callDuration'] : 0;
-    final startDateRaw = call?['callStartDate'];
-    final remarks = call?['remarks'] ?? 'No remarks';
-    final callType = call?['callType'] == 0 ? 'Outgoing' : 'Incoming';
-
-    // Format date
-    String formattedStartDate = 'N/A';
-    if (startDateRaw is String) {
-      final date = DateTime.tryParse(startDateRaw);
-      if (date != null) {
-        formattedStartDate = DateFormat('hh:mm a, dd MMM').format(date);
-      }
-    }
-
-    return Center(
-      child: Container(
-        width: MediaQuery.of(context).size.width * 0.9,
-        constraints: const BoxConstraints(maxHeight: 480),
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Interaction Details'),
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black,
+        elevation: 1,
+      ),
+      body: Padding(
         padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(24),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.25),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
           children: [
-            // Header Row
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  callType,
-                  style: const TextStyle(fontSize: 14, color: Colors.black54),
-                ),
-                GestureDetector(
-                  onTap: () => Navigator.of(context).pop(),
-                  child: const Icon(Icons.close, color: Colors.black),
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 4),
-
-            // Caller Name
+            // Header Info
             Align(
               alignment: Alignment.centerLeft,
-              child: Padding(
-                padding: const EdgeInsets.only(top: 4, bottom: 16),
-                child: Text(
-                  resolvedCallerName,
-                  style: const TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+              child: Text(
+                widget.callerName,
+                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+              ),
+            ),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                getCallType(call?.callType?.index),
+                style: const TextStyle(fontSize: 14, color: Colors.black54),
               ),
             ),
 
+            const SizedBox(height: 20),
             const Align(
               alignment: Alignment.centerLeft,
               child: Text(
                 'LAST INTERACTION',
-                style: TextStyle(
-                  color: Colors.grey,
-                  fontSize: 12,
-                  letterSpacing: 1.2,
-                ),
+                style: TextStyle(color: Colors.grey, fontSize: 12, letterSpacing: 1.2),
               ),
             ),
-
             const SizedBox(height: 8),
 
-            // Interaction Box
+            // Call Info Box
             Container(
+              width: double.infinity,
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
                 color: Colors.grey.shade100,
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Duration: ${callDuration} sec',
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.black87,
+              child: call == null
+                  ? const Text('No interaction found.')
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Duration: ${call.duration} sec',
+                          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Start: ${formatDate(DateTime.fromMillisecondsSinceEpoch(call.timestamp ?? 0))}',
+                          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 6),
+                        const Text(
+                          'No remarks',
+                          style: TextStyle(fontSize: 13, color: Colors.black54),
+                        ),
+                      ],
                     ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Start: $formattedStartDate',
-                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    remarks.isEmpty ? 'No remarks' : remarks,
-                    style: const TextStyle(fontSize: 13, color: Colors.black54),
-                  ),
-                ],
-              ),
             ),
 
-            const SizedBox(height: 24),
+            const Spacer(),
 
             // Buttons
             Row(
               children: [
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: () {
-                      Navigator.of(context).pop(); // Close popup
-                      onCall();                     // Trigger the call
+                    onPressed: () async {
+                      final telUrl = Uri.parse('tel:${widget.phoneNumber}');
+                      if (await canLaunchUrl(telUrl)) {
+                        await launchUrl(telUrl);
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Cannot launch dialer')),
+                        );
+                      }
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.green[700],
@@ -152,11 +178,7 @@ class InteractionScreen extends StatelessWidget {
                     ),
                     child: const Text(
                       '📞 Call Now',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1.1,
-                      ),
+                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, letterSpacing: 1.1),
                     ),
                   ),
                 ),
@@ -164,8 +186,7 @@ class InteractionScreen extends StatelessWidget {
                 Expanded(
                   child: ElevatedButton(
                     onPressed: () {
-                      // Add Interaction button pressed logic
-                      // You can open another screen or form
+                      // Navigate to Add Interaction
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF0B2C49),
@@ -176,11 +197,7 @@ class InteractionScreen extends StatelessWidget {
                     ),
                     child: const Text(
                       'ADD INTERACTION',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1.1,
-                      ),
+                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, letterSpacing: 1.1),
                     ),
                   ),
                 ),

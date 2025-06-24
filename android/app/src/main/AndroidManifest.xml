@@ -1,14 +1,13 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.example.callman">
 
-    <!-- Permissions -->
+    <!-- 📱 Required Permissions -->
     <uses-permission android:name="android.permission.CALL_PHONE" />
     <uses-permission android:name="android.permission.READ_CALL_LOG" />
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <uses-permission android:name="android.permission.ANSWER_PHONE_CALLS" />
     <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
-    <uses-permission android:name="android.permission.PROCESS_OUTGOING_CALLS" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.READ_CONTACTS" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
@@ -18,9 +17,16 @@
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" /> <!-- Android 13+ -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
-    <!-- Features -->
+    <!-- ⚠️ Deprecated: Avoid if targeting Android 10+ -->
+    <!-- Use Accessibility or TelecomManager if needed -->
+    <!-- <uses-permission android:name="android.permission.PROCESS_OUTGOING_CALLS" /> -->
+
+    <!-- ⚠️ Use only if absolutely needed and justified (Scoped Storage bypass) -->
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
+
+    <!-- 🔧 Required Features -->
     <uses-feature android:name="android.hardware.telephony" android:required="true" />
     <uses-feature android:name="android.hardware.microphone" android:required="true" />
 
@@ -34,20 +40,19 @@
         android:enableOnBackInvokedCallback="true"
         android:networkSecurityConfig="@xml/network_security_config">
 
-        <!-- Floating Overlay Service -->
+        <!-- 🪟 Floating Overlay Services -->
         <service
             android:name="com.example.overlay.FloatingService"
             android:enabled="true"
             android:exported="false" />
 
-        <!-- Overlay Package Service -->
         <service
             android:name="dev.xslayer.overlay.OverlayService"
             android:permission="android.permission.SYSTEM_ALERT_WINDOW"
             android:exported="false"
             android:foregroundServiceType="mediaProjection|phoneCall" />
 
-        <!-- Main Activity -->
+        <!-- 🚀 Main Activity -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -65,7 +70,7 @@
             </intent-filter>
         </activity>
 
-        <!-- ✅ Reminder Receiver -->
+        <!-- 🔔 Boot Receiver -->
         <receiver
             android:name=".ReminderReceiver"
             android:exported="true">
@@ -74,7 +79,7 @@
             </intent-filter>
         </receiver>
 
-        <!-- CallKit Incoming Services -->
+        <!-- 📞 CallKit Services -->
         <service
             android:name="com.hiennv.flutter_callkit_incoming.CallkitIncomingService"
             android:permission="android.permission.BIND_JOB_SERVICE"
@@ -98,13 +103,13 @@
             </intent-filter>
         </receiver>
 
-        <!-- Flutter embedding version -->
+        <!-- 📦 Flutter Embedding -->
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
     </application>
 
-    <!-- Query for text sharing -->
+    <!-- 🔍 Intent queries -->
     <queries>
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT" />

@@ -3,7 +3,8 @@ import 'dart:convert';
 import 'package:call_log/call_log.dart';
 import 'package:callman/Dashboard/Dashboard.dart';
 import 'package:callman/Pages/DialPad.dart';
-import 'package:callman/Pages/DoctorHome.dart';
+import 'package:callman/Pages/dialpad2.dart';
+
 // import 'package:callman/Pages/Settings.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -56,34 +57,34 @@ Future<void> _loadReminders() async {
   }
 }
 
-  Future<void> _fetchCallLogs() async {
-    var status = await Permission.phone.status;
-    if (!status.isGranted) {
-      status = await Permission.phone.request();
-      if (!status.isGranted) {
-        setState(() {
-          _permissionDenied = true;
-          _isLoading = false;
-        });
-        return;
-      }
-    }
+Future<void> _fetchCallLogs() async {
+  final status = await Permission.phone.status;
 
-    try {
-      final Iterable<CallLogEntry> entries = await CallLog.get();
-      setState(() {
-        _callLogs = entries.toList()
-          ..sort((a, b) => (b.timestamp ?? 0).compareTo(a.timestamp ?? 0));
-        _isLoading = false;
-      });
-      _loadReminders();
-    } catch (e) {
-      setState(() {
-        _isLoading = false;
-      });
-      debugPrint('Error fetching call logs: $e');
-    }
+  if (!status.isGranted) {
+    // Optionally skip requesting again if already handled globally
+    setState(() {
+      _permissionDenied = true;
+      _isLoading = false;
+    });
+    return;
   }
+
+  try {
+    final Iterable<CallLogEntry> entries = await CallLog.get();
+    setState(() {
+      _callLogs = entries.toList()
+        ..sort((a, b) => (b.timestamp ?? 0).compareTo(a.timestamp ?? 0));
+      _isLoading = false;
+    });
+    _loadReminders(); // Load reminders after logs are fetched
+  } catch (e) {
+    setState(() {
+      _isLoading = false;
+    });
+    debugPrint('Error fetching call logs: $e');
+  }
+}
+
 
   List<CallLogEntry> get _filteredCallLogs {
     switch (_currentTab) {
@@ -114,18 +115,7 @@ Future<void> _loadReminders() async {
     return '$seconds sec';
   }
 
-  String _getCallType(CallType? type) {
-    switch (type) {
-      case CallType.incoming:
-        return 'Incoming';
-      case CallType.outgoing:
-        return 'Outgoing';
-      case CallType.missed:
-        return 'Missed';
-      default:
-        return 'Unknown';
-    }
-  }
+
 
   IconData _getCallTypeIcon(CallType? type) {
     switch (type) {
@@ -157,10 +147,10 @@ Future<void> _loadReminders() async {
     if (idx == _selectedIndex) return;
     Widget? target;
     if (idx == 0)
-      target = DoctorHomeScreen(email: widget.email, userName: widget.userName);
-    if (idx == 2) target = const DialPadScreen();
+      target = DashboardScreen(email: widget.email, userName: widget.userName);
+    if (idx == 2) target =  DialPadScreen1();
     if (idx == 3)
-      target = DashboardScreen();
+      target = DialPadScreen(userName: widget.userName, email:widget.email ,);
     if (target != null) {
       Navigator.pushReplacement(
           context, MaterialPageRoute(builder: (_) => target!));
@@ -252,12 +242,12 @@ Future<void> _loadReminders() async {
     final callId = '${log.number}_${log.timestamp}'; 
     final reminderData = _callReminders[callId];
     
-    return CallLogCard(
+    return AnimatedCallCard(
       name: log.name ?? 'Unknown',
       number: log.number ?? 'Unknown',
       date: _formatDate(log.timestamp),
       duration: _formatDuration(log.duration),
-      callType: log.callType,
+      // callType: log.callType,
       callTypeIcon: _getCallTypeIcon(log.callType),
       callTypeColor: _getCallTypeColor(log.callType),
       reminderData: reminderData,
@@ -270,18 +260,37 @@ Future<void> _loadReminders() async {
           ),
         ),
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _selectedIndex,
-        selectedItemColor: const Color(0xFF00BFA5),
-        unselectedItemColor: Colors.grey,
-        onTap: _onNav,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-          BottomNavigationBarItem(
-              icon: Icon(Icons.call_missed_outgoing), label: 'Settings'),
-          BottomNavigationBarItem(icon: Icon(Icons.call), label: 'Call'),
-          BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: 'Wallet'),
-        ],
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 10,
+              offset: const Offset(0, -5),
+            ),
+          ],
+        ),
+        child: BottomNavigationBar(
+          backgroundColor: Colors.white,
+          currentIndex: _selectedIndex,
+          selectedItemColor: const Color(0xFF00BFA5),
+          unselectedItemColor: Colors.grey,
+          onTap: _onNav,
+          items: const [
+            BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
+        BottomNavigationBarItem(icon: Icon(Icons.event_note), label: "Appointments"),
+            BottomNavigationBarItem(icon: Icon(Icons.call), label: 'Call'),
+                                    BottomNavigationBarItem(
+              icon: Icon(Icons.alarm),
+              label: "Dashboard",
+            ),
+                        BottomNavigationBarItem(
+              icon: Icon(Icons.menu),
+              label: "Dashboard",
+            ),
+            // BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: 'Wallet'),
+          ],
+        ),
       ),
     );
   }
@@ -329,249 +338,446 @@ class _FilterTab extends StatelessWidget {
   }
 }
 
-// In your CallLogCard widget (replace the existing one):
-class CallLogCard extends StatefulWidget {
+
+
+class AnimatedCallCard extends StatefulWidget {
   final String name;
   final String number;
   final String date;
   final String duration;
-  final CallType? callType;
   final IconData callTypeIcon;
   final Color callTypeColor;
   final Map<String, dynamic>? reminderData;
 
-  const CallLogCard({
-    super.key,
+  const AnimatedCallCard({
+    Key? key,
     required this.name,
     required this.number,
     required this.date,
     required this.duration,
-    required this.callType,
     required this.callTypeIcon,
     required this.callTypeColor,
     this.reminderData,
-  });
+  }) : super(key: key);
 
   @override
-  State<CallLogCard> createState() => _CallLogCardState();
+  _AnimatedCallCardState createState() => _AnimatedCallCardState();
 }
 
-class _CallLogCardState extends State<CallLogCard> {
-  Timer? _timer;
-  Duration? _timeRemaining;
-  bool _isPast = false;
-  String _formattedReminderTime = '';
+class _AnimatedCallCardState extends State<AnimatedCallCard>
+    with TickerProviderStateMixin {
+  late AnimationController _slideController;
+  late AnimationController _scaleController;
+  late AnimationController _reminderController;
+  late Animation<Offset> _slideAnimation;
+  late Animation<double> _scaleAnimation;
+  late Animation<double> _reminderAnimation;
+  
+  bool _isPressed = false;
+  bool _isExpanded = false;
 
   @override
   void initState() {
     super.initState();
-    _initializeReminderData();
-  }
-
-  void _initializeReminderData() {
-    if (widget.reminderData != null && widget.reminderData!['reminderTime'] != null) {
-      final reminderTime = DateTime.fromMillisecondsSinceEpoch(
-        widget.reminderData!['reminderTime'] as int
-      );
-      _formattedReminderTime = DateFormat('EEE MMM d HH:mm:ss yyyy').format(reminderTime);
-      debugPrint("⏰ Reminder found for: $_formattedReminderTime");
-      
-      _updateRemainingTime();
-      _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-        _updateRemainingTime();
-      });
-    }
-  }
-
-  void _updateRemainingTime() {
-    if (widget.reminderData == null || widget.reminderData!['reminderTime'] == null) return;
     
-    final reminderTime = DateTime.fromMillisecondsSinceEpoch(
-      widget.reminderData!['reminderTime'] as int
+    _slideController = AnimationController(
+      duration: Duration(milliseconds: 600),
+      vsync: this,
     );
-    final now = DateTime.now();
-    final difference = reminderTime.difference(now);
     
-    setState(() {
-      _timeRemaining = difference;
-      _isPast = difference.isNegative;
-    });
-  }
+    _scaleController = AnimationController(
+      duration: Duration(milliseconds: 200),
+      vsync: this,
+    );
+    
+    _reminderController = AnimationController(
+      duration: Duration(milliseconds: 800),
+      vsync: this,
+    );
 
-  String _formatRemainingTime() {
-    if (_timeRemaining == null) return '';
-    
-    if (_isPast) {
-      return 'Was due on ${DateFormat('MMM dd, hh:mm a').format(
-        DateTime.fromMillisecondsSinceEpoch(widget.reminderData!['reminderTime'] as int)
-      )
-      }';
-    }
-    
-    final duration = _timeRemaining!;
-    if (duration.inDays > 0) {
-      return 'Due in ${duration.inDays}d ${duration.inHours.remainder(24)}h';
-    } else if (duration.inHours > 0) {
-      return 'Due in ${duration.inHours}h ${duration.inMinutes.remainder(60)}m';
-    } else if (duration.inMinutes > 0) {
-      return 'Due in ${duration.inMinutes}m';
-    } else {
-      return 'Due in ${duration.inSeconds}s';
+    _slideAnimation = Tween<Offset>(
+      begin: Offset(1.0, 0.0),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(
+      parent: _slideController,
+      curve: Curves.elasticOut,
+    ));
+
+    _scaleAnimation = Tween<double>(
+      begin: 1.0,
+      end: 0.95,
+    ).animate(CurvedAnimation(
+      parent: _scaleController,
+      curve: Curves.easeInOut,
+    ));
+
+    _reminderAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(
+      parent: _reminderController,
+      curve: Curves.bounceOut,
+    ));
+
+    // Start entrance animations
+    _slideController.forward();
+    if (hasReminder) {
+      Future.delayed(Duration(milliseconds: 300), () {
+        _reminderController.forward();
+      });
     }
   }
 
   @override
   void dispose() {
-    _timer?.cancel();
-    debugPrint("Disposing timer for reminder card");
+    _slideController.dispose();
+    _scaleController.dispose();
+    _reminderController.dispose();
     super.dispose();
+  }
+
+  bool get hasReminder => widget.reminderData != null;
+  
+  bool get _isPast {
+    if (!hasReminder) return false;
+    try {
+      DateTime reminderTime = DateTime.parse(widget.reminderData!['dateTime']);
+      return DateTime.now().isAfter(reminderTime);
+    } catch (e) {
+      return false;
+    }
+  }
+
+  String _formatRemainingTime() {
+    if (!hasReminder) return '';
+    try {
+      DateTime reminderTime = DateTime.parse(widget.reminderData!['dateTime']);
+      Duration diff = reminderTime.difference(DateTime.now());
+      
+      if (diff.isNegative) {
+        return 'Overdue by ${diff.abs().inHours}h ${diff.abs().inMinutes % 60}m';
+      } else {
+        return 'In ${diff.inHours}h ${diff.inMinutes % 60}m';
+      }
+    } catch (e) {
+      return 'Invalid time';
+    }
+  }
+
+  void _onTapDown(TapDownDetails details) {
+    setState(() => _isPressed = true);
+    _scaleController.forward();
+  }
+
+  void _onTapUp(TapUpDetails details) {
+    setState(() => _isPressed = false);
+    _scaleController.reverse();
+  }
+
+  void _onTapCancel() {
+    setState(() => _isPressed = false);
+    _scaleController.reverse();
+  }
+
+  Widget _buildCallTypeIcon() {
+    return TweenAnimationBuilder<double>(
+      duration: Duration(milliseconds: 400),
+      tween: Tween(begin: 0.0, end: 1.0),
+      builder: (context, value, child) {
+        return Transform.scale(
+          scale: value,
+          child: Transform.rotate(
+            angle: value * 0.1,
+            child: Container(
+              padding: EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: widget.callTypeColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Icon(
+                widget.callTypeIcon,
+                color: widget.callTypeColor,
+                size: 20,
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildReminderSection() {
+    if (!hasReminder) return SizedBox.shrink();
+    
+    return AnimatedBuilder(
+      animation: _reminderAnimation,
+      builder: (context, child) {
+        return Transform.scale(
+          scale: _reminderAnimation.value,
+          child: Opacity(
+            opacity: _reminderAnimation.value,
+            child: Container(
+              margin: EdgeInsets.only(top: 12),
+              padding: EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: _isPast 
+                    ? [Colors.red[50]!, Colors.red[100]!]
+                    : [Colors.blue[50]!, Colors.blue[100]!],
+                ),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: _isPast ? Colors.red[200]! : Colors.blue[200]!,
+                  width: 1,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: (_isPast ? Colors.red : Colors.blue).withOpacity(0.1),
+                    blurRadius: 8,
+                    offset: Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  TweenAnimationBuilder<double>(
+                    duration: Duration(milliseconds: 1000),
+                    tween: Tween(begin: 0.0, end: 1.0),
+                    builder: (context, value, child) {
+                      return Transform.rotate(
+                        angle: value * 0.5,
+                        child: Icon(
+                          Icons.alarm,
+                          size: 20,
+                          color: _isPast ? Colors.red[600] : Colors.blue[600],
+                        ),
+                      );
+                    },
+                  ),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.reminderData?['remarks'] ?? 'Call reminder',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: _isPast ? Colors.red[700] : Colors.blue[700],
+                          ),
+                        ),
+                        SizedBox(height: 4),
+                        Text(
+                          _formatRemainingTime(),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: _isPast ? Colors.red[600] : Colors.blue[600],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (_isPast)
+                    TweenAnimationBuilder<double>(
+                      duration: Duration(milliseconds: 800),
+                      tween: Tween(begin: 0.0, end: 1.0),
+                      builder: (context, value, child) {
+                        return Transform.scale(
+                          scale: 0.8 + (0.2 * value),
+                          child: Icon(
+                            Icons.warning_amber_rounded,
+                            size: 18,
+                            color: Colors.red[600],
+                          ),
+                        );
+                      },
+                    ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final hasReminder = widget.reminderData != null;
-    final isMIUI = Theme.of(context).platform == TargetPlatform.android;
-    
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
-      elevation: isMIUI ? 1 : 2, // Adjust for MIUI devices
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Caller info row
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Text(
-                    widget.name,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                Icon(
-                  widget.callTypeIcon,
-                  color: widget.callTypeColor,
-                  size: 20,
-                ),
-              ],
-            ),
-            
-            // Phone number
-            const SizedBox(height: 6),
-            Text(
-              widget.number,
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey[700],
-              ),
-            ),
-            
-            // Call date and duration
-            const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    Icon(
-                      Icons.access_time,
-                      size: 16,
-                      color: Colors.grey[600],
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      widget.date,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey[600],
-                      ),
-                    ),
-                  ],
-                ),
-                Row(
-                  children: [
-                    Icon(
-                      Icons.timer,
-                      size: 16,
-                      color: Colors.grey[600],
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      widget.duration,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey[600],
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            
-            // Reminder section
-            if (hasReminder) ...[
-              const SizedBox(height: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+    return SlideTransition(
+      position: _slideAnimation,
+      child: AnimatedBuilder(
+        animation: _scaleAnimation,
+        builder: (context, child) {
+          return Transform.scale(
+            scale: _scaleAnimation.value,
+            child: GestureDetector(
+              onTapDown: _onTapDown,
+              onTapUp: _onTapUp,
+              onTapCancel: _onTapCancel,
+              onTap: () {
+                setState(() => _isExpanded = !_isExpanded);
+              },
+              child: Container(
+                margin: EdgeInsets.only(bottom: 16),
                 decoration: BoxDecoration(
-                  color: _isPast ? Colors.red[50] : Colors.blue[50],
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: _isPast ? Colors.red[100]! : Colors.blue[100]!,
-                    width: 1,
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.alarm,
-                      size: 16,
-                      color: _isPast ? Colors.red[600] : Colors.blue[600],
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.08),
+                      blurRadius: 12,
+                      offset: Offset(0, 6),
                     ),
-                    const SizedBox(width: 6),
-                    Expanded(
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.04),
+                      blurRadius: 6,
+                      offset: Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: Padding(
+                      padding: EdgeInsets.all(16),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            widget.reminderData?['remarks'] ?? 'Call reminder',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: _isPast ? Colors.red[600] : Colors.blue[600],
-                            ),
+                          // Header row with name and call type
+                          Row(
+                            children: [
+                              Expanded(
+                                child: TweenAnimationBuilder<double>(
+                                  duration: Duration(milliseconds: 500),
+                                  tween: Tween(begin: 0.0, end: 1.0),
+                                  builder: (context, value, child) {
+                                    return Transform.translate(
+                                      offset: Offset(-20 * (1 - value), 0),
+                                      child: Opacity(
+                                        opacity: value,
+                                        child: Text(
+                                          widget.name,
+                                          style: TextStyle(
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.grey[800],
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                              _buildCallTypeIcon(),
+                            ],
                           ),
-                          Text(
-                            _formatRemainingTime(),
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: _isPast ? Colors.red[600] : Colors.blue[600],
-                            ),
+                          
+                          // Phone number
+                          SizedBox(height: 8),
+                          TweenAnimationBuilder<double>(
+                            duration: Duration(milliseconds: 600),
+                            tween: Tween(begin: 0.0, end: 1.0),
+                            builder: (context, value, child) {
+                              return Transform.translate(
+                                offset: Offset(-15 * (1 - value), 0),
+                                child: Opacity(
+                                  opacity: value,
+                                  child: Text(
+                                    widget.number,
+                                    style: TextStyle(
+                                      fontSize: 15,
+                                      color: Colors.grey[600],
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
                           ),
+                          
+                          // Date and duration row
+                          SizedBox(height: 16),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: TweenAnimationBuilder<double>(
+                                  duration: Duration(milliseconds: 700),
+                                  tween: Tween(begin: 0.0, end: 1.0),
+                                  builder: (context, value, child) {
+                                    return Transform.translate(
+                                      offset: Offset(-10 * (1 - value), 0),
+                                      child: Opacity(
+                                        opacity: value,
+                                        child: Row(
+                                          children: [
+                                            Icon(
+                                              Icons.access_time_rounded,
+                                              size: 16,
+                                              color: Colors.grey[500],
+                                            ),
+                                            SizedBox(width: 6),
+                                            Text(
+                                              widget.date,
+                                              style: TextStyle(
+                                                fontSize: 13,
+                                                color: Colors.grey[600],
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                              TweenAnimationBuilder<double>(
+                                duration: Duration(milliseconds: 800),
+                                tween: Tween(begin: 0.0, end: 1.0),
+                                builder: (context, value, child) {
+                                  return Transform.translate(
+                                    offset: Offset(10 * (1 - value), 0),
+                                    child: Opacity(
+                                      opacity: value,
+                                      child: Row(
+                                        children: [
+                                          Icon(
+                                            Icons.timer_outlined,
+                                            size: 16,
+                                            color: Colors.grey[500],
+                                          ),
+                                          SizedBox(width: 6),
+                                          Text(
+                                            widget.duration,
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              color: Colors.grey[600],
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ],
+                          ),
+                          
+                          // Reminder section
+                          _buildReminderSection(),
                         ],
                       ),
                     ),
-                    if (_isPast)
-                      Icon(
-                        Icons.warning_amber_rounded,
-                        size: 16,
-                        color: Colors.red[600],
-                      ),
-                  ],
+                  ),
                 ),
               ),
-            ],
-          ],
-        ),
+            ),
+          );
+        },
       ),
     );
   }

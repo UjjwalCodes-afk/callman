@@ -1,9 +1,10 @@
+import 'package:callman/Dashboard/Dashboard.dart';
 import 'package:flutter/material.dart';
 import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:callman/Pages/Login.dart';
-import 'package:callman/Pages/DoctorHome.dart';
+// import 'package:callman/Pages/DoctorHome.dart';
 
 class SplashScreen extends StatefulWidget {
   @override
@@ -20,27 +21,23 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> checkAuthStatus() async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('token');
+  final prefs = await SharedPreferences.getInstance();
+  final token = prefs.getString('token');
+  final userName = prefs.getString('userName') ?? 'Guest';
+  final email = prefs.getString('userEmail') ?? 'guest@example.com';
 
-    if (token != null && token.isNotEmpty) {
-      // Get user data (optional, or use placeholders)
-      final userName = prefs.getString('userName') ?? '';
-      final email = prefs.getString('userEmail') ?? '';
-
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => DoctorHomeScreen(
-            userName: userName,
-            email: email,
-          ),
-        ),
-      );
-    } else {
-      goToLogin();
-    }
+  if (token != null && token.isNotEmpty) {
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) => DashboardScreen(userName: userName, email: email),
+      ),
+    );
+  } else {
+    goToLogin();
   }
+}
+
 
   void goToLogin() {
     Timer(const Duration(seconds: 1), () {

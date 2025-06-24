@@ -1,7 +1,14 @@
 # Add these at the top of your existing proguard-rules.pro
+-keep class com.github.tamir7.contacts.** { *; }
+-keep class com.github.tamir7.phonestate.** { *; }
+-keep class com.github.tamir7.calllog.** { *; }
 -keepattributes *Annotation*, Signature, InnerClasses
 -keepnames class * { @javax.annotation.* <methods>; }
 -keepnames class * { @javax.annotation.* <fields>; }
+
+# Flutter Quill lifecycle fix
+-keep class androidx.lifecycle.** { *; }
+-keep class * extends androidx.lifecycle.LifecycleObserver { *; }
 
 # Jackson specific rules
 -keep class com.fasterxml.jackson.** { *; }
