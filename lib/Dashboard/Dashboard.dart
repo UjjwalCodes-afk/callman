@@ -227,11 +227,11 @@ class _DashboardScreenState extends State<DashboardScreen>
             ),
                         BottomNavigationBarItem(
               icon: Icon(Icons.alarm),
-              label: "Dashboard",
+              label: "Reminders",
             ),
                         BottomNavigationBarItem(
               icon: Icon(Icons.menu),
-              label: "Dashboard",
+              label: "Menu",
             ),
           ],
         ),

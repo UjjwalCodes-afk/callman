@@ -1,11 +1,19 @@
 import 'package:callman/Dashboard/Dashboard.dart';
 import 'package:callman/Pages/Interaction.dart';
+import 'package:callman/Pages/PostCallsDetailsScreen.dart';
 import 'package:flutter/material.dart';
 import 'package:phone_state/phone_state.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:shared_preferences/shared_preferences.dart'; // ✅ Added import
 import 'dart:async';
+import 'package:flutter/services.dart'; // For MethodChannel
+import 'package:android_intent_plus/android_intent.dart'; // For permissions
+
+
+
+
+
 
 class DialPadScreen1 extends StatefulWidget {
   const DialPadScreen1({super.key});
@@ -27,6 +35,43 @@ class _DialPadScreen1State extends State<DialPadScreen1> {
   String? _userName;
   String? _email;
 
+  static const MethodChannel overlayChannel = MethodChannel('com.callman.overlay');
+
+Future<void> showOverlay(String name, String number) async {
+  try {
+    if (name.trim().isEmpty || number.trim().isEmpty) {
+      debugPrint("❌ Overlay not shown – Missing name or number");
+      return;
+    }
+
+    final normalizedNumber = normalizeNumber(number);
+    debugPrint("📲 Sending to Overlay → Name: $name | Number: $normalizedNumber");
+
+    await overlayChannel.invokeMethod('showOverlay', {
+      'callerName': name,
+      'callerNumber': normalizedNumber,
+    });
+  } on PlatformException catch (e) {
+    debugPrint("Failed to show overlay: '${e.message}'");
+  }
+}
+
+Future<void> checkOverlayPermission() async {
+  if (!await Permission.systemAlertWindow.isGranted) {
+    final intent = AndroidIntent(
+      action: 'android.settings.action.MANAGE_OVERLAY_PERMISSION',
+      data: 'package:com.example.callman',
+    );
+    await intent.launch();
+  }
+}
+
+// Normalize number utility
+String normalizeNumber(String number) {
+  return number.replaceAll(RegExp(r'\D'), ''); // Remove non-digit characters
+}
+
+
   @override
   void initState() {
     super.initState();
@@ -39,6 +84,28 @@ class _DialPadScreen1State extends State<DialPadScreen1> {
     _phoneStateSubscription?.cancel();
     super.dispose();
   }
+
+Future<void> _showReminderRemarksForm(BuildContext context) async {
+  await Navigator.of(context).push(
+    PageRouteBuilder(
+      opaque: false,
+      barrierColor: Colors.transparent,
+      pageBuilder: (_, __, ___) {
+        return Scaffold(
+          backgroundColor: Colors.black.withOpacity(0.5),
+          body: Center(
+            child: Material(
+              borderRadius: BorderRadius.circular(16),
+              child: PostCallDetailsCard(phoneNumber: _phoneNumber,),
+            ),
+          ),
+        );
+      },
+    ),
+  );
+}
+
+
 
   Future<void> _loadUserData() async {
     final prefs = await SharedPreferences.getInstance();
@@ -82,7 +149,9 @@ if (event.status == PhoneStateStatus.CALL_ENDED && _callStarted) {
   await _sendCallEndData(duration);
 
   if (mounted) {
-    // Delay navigation slightly to prevent fast redirection
+    // ✅ Show the post-call remarks form before navigating
+    await _showReminderRemarksForm(context);
+
     Future.delayed(const Duration(seconds: 1), () {
       if (mounted) {
         Navigator.pushAndRemoveUntil(
@@ -101,8 +170,9 @@ if (event.status == PhoneStateStatus.CALL_ENDED && _callStarted) {
 
   _callConnectedTime = null;
   _callDataSent = false;
-  _hasCalled = false; // ✅ Reset only after the navigation completes
+  _hasCalled = false;
 }
+
 
       });
     } catch (e) {
@@ -133,16 +203,17 @@ if (event.status == PhoneStateStatus.CALL_ENDED && _callStarted) {
     }
   }
 
-  Future<void> _makeCall() async {
-    final Uri uri = Uri(scheme: 'tel', path: _phoneNumber);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri);
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Unable to place call')),
-      );
-    }
+Future<void> _makeCall() async {
+  final Uri uri = Uri(scheme: 'tel', path: _phoneNumber);
+  if (await canLaunchUrl(uri)) {
+    await launchUrl(uri, mode: LaunchMode.platformDefault); // ← FIXED
+  } else {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Unable to place call')),
+    );
   }
+}
+
 
   Future<Map<String, dynamic>> _fetchLastInteraction(String number) async {
     await Future.delayed(const Duration(milliseconds: 500));
@@ -158,39 +229,42 @@ if (event.status == PhoneStateStatus.CALL_ENDED && _callStarted) {
     };
   }
 
-  Future<void> _showInteractionAndCall() async {
-    if (_phoneNumber.isEmpty || !mounted || _hasCalled) return;
+Future<void> _showInteractionAndCall() async {
+  if (_phoneNumber.isEmpty || !mounted || _hasCalled) return;
 
-    try {
-      final interactionData = await _fetchLastInteraction(_phoneNumber);
-      if (!mounted) return;
+  try {
+    final interactionData = await _fetchLastInteraction(_phoneNumber);
+    final callerName = interactionData["callerName"] ?? "Guest";
 
-      _hasCalled = true;
+    _hasCalled = true;
 
-      await Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => InteractionScreen(
-            phoneNumber: _phoneNumber,
-            callerName: interactionData["callerName"],
-          ),
+    // ✅ Show overlay first
+    await checkOverlayPermission();
+    await showOverlay(callerName, _phoneNumber);
+
+    // ✅ Show interaction screen
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => InteractionScreen(
+          phoneNumber: _phoneNumber,
+          callerName: callerName,
         ),
-      );
+      ),
+    );
 
-      await _makeCall();
+    // ✅ Make the call
+    await _makeCall();
 
-      setState(() {
-        _phoneNumber = '';
-      });
-    } catch (e) {
-      debugPrint('Navigation error: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: ${e.toString()}')),
-        );
-      }
-    }
+    setState(() {
+      _phoneNumber = '';
+    });
+  } catch (e) {
+    debugPrint('❌ Error in _showInteractionAndCall: $e');
   }
+}
+
+
 
   Widget _buildDialButton(String v) {
     return GestureDetector(
@@ -234,33 +308,47 @@ if (event.status == PhoneStateStatus.CALL_ENDED && _callStarted) {
         elevation: 0,
       ),
       body: SafeArea(
-        child: Column(
-          children: [
-            const SizedBox(height: 30),
-            Text(_phoneNumber, style: const TextStyle(fontSize: 36, letterSpacing: 2)),
-            const SizedBox(height: 30),
-            _buildDialPad(),
-            IconButton(
-              icon: const Icon(Icons.backspace_outlined),
-              color: Colors.grey[700],
-              iconSize: 30,
-              onPressed: _deleteDigit,
+  child: LayoutBuilder(
+    builder: (context, constraints) {
+      return SingleChildScrollView(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            minHeight: constraints.maxHeight,
+          ),
+          child: IntrinsicHeight(
+            child: Column(
+              children: [
+                const SizedBox(height: 30),
+                Text(_phoneNumber, style: const TextStyle(fontSize: 36, letterSpacing: 2)),
+                const SizedBox(height: 30),
+                _buildDialPad(),
+                IconButton(
+                  icon: const Icon(Icons.backspace_outlined),
+                  color: Colors.grey[700],
+                  iconSize: 30,
+                  onPressed: _deleteDigit,
+                ),
+                const Spacer(),
+                GestureDetector(
+                  onTap: _showInteractionAndCall,
+                  child: Container(
+                    height: 70,
+                    width: 70,
+                    decoration: const BoxDecoration(
+                        color: Colors.green, shape: BoxShape.circle),
+                    child: const Icon(Icons.call, color: Colors.white, size: 32),
+                  ),
+                ),
+                const SizedBox(height: 30),
+              ],
             ),
-            const Spacer(),
-            GestureDetector(
-              onTap: _showInteractionAndCall,
-              child: Container(
-                height: 70,
-                width: 70,
-                decoration: const BoxDecoration(
-                    color: Colors.green, shape: BoxShape.circle),
-                child: const Icon(Icons.call, color: Colors.white, size: 32),
-              ),
-            ),
-            const SizedBox(height: 30),
-          ],
+          ),
         ),
-      ),
+      );
+    },
+  ),
+),
+
     );
   }
 }

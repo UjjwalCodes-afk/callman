@@ -302,12 +302,13 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:http/http.dart' as http;
+
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:callman/reminder_channel.dart';
 
 class PostCallDetailsCard extends StatefulWidget {
-  const PostCallDetailsCard({Key? key}) : super(key: key);
+    final String phoneNumber;
+  const PostCallDetailsCard({Key? key, required this.phoneNumber}) : super(key: key);
 
   @override
   State<PostCallDetailsCard> createState() => _PostCallDetailsCardState();
@@ -331,18 +332,26 @@ class _PostCallDetailsCardState extends State<PostCallDetailsCard> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
-  void _log(String msg) {
-    debugPrint(msg);
-  }
 
-  Future<void> _loadCallDetails() async {
-    final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      _callId = prefs.getString('callId');
-      _bearerToken = prefs.getString('token');
-    });
-    _log("📥 Loaded callId=$_callId & token=$_bearerToken");
+
+Future<void> _loadCallDetails() async {
+  final prefs = await SharedPreferences.getInstance();
+  setState(() {
+    _callId = prefs.getString('callId');
+    _bearerToken = prefs.getString('token');
+  });
+
+  // Logging specific keys
+  debugPrint("📥 Loaded callId = $_callId");
+  debugPrint("📥 Loaded token = $_bearerToken");
+
+  // Optional: Log all keys and values stored in SharedPreferences
+  debugPrint("📦 All SharedPreferences:");
+  for (String key in prefs.getKeys()) {
+    debugPrint("🔑 $key: ${prefs.get(key)}");
   }
+}
+
 
   Future<void> _pickDateTime() async {
     final now = DateTime.now();
@@ -367,65 +376,48 @@ class _PostCallDetailsCardState extends State<PostCallDetailsCard> {
     }
   }
 
-  Future<void> _saveDetails() async {
-    if (_callId == null || _bearerToken == null) {
-      _showMessage("Call ID or Bearer Token not found!");
-      return;
-    }
+Future<void> _saveDetails() async {
+  final remarks = _remarksController.text.trim();
+  final reminder = _selectedDate?.toUtc().toIso8601String() ?? '';
 
-    final remarks = _remarksController.text.trim();
-    final reminder = _selectedDate?.toUtc().toIso8601String() ?? '';
-
-    if (remarks.isEmpty || reminder.isEmpty) {
-      _showMessage("Please enter remarks and select a date.");
-      return;
-    }
-
-    setState(() => _isLoading = true);
-
-    try {
-      final response = await http.put(
-        Uri.parse('https://api.callman.in/api/user/call/$_callId'),
-        headers: {
-          'Authorization': 'Bearer $_bearerToken',
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode({'reminder': reminder, 'remarks': remarks}),
-      );
-
-      if (response.statusCode == 200) {
-        final prefs = await SharedPreferences.getInstance();
-        final reminders = prefs.getStringList('call_reminders') ?? [];
-        reminders.add(jsonEncode({
-          'callId': _callId,
-          'remarks': remarks,
-          'reminderTime': _selectedDate!.millisecondsSinceEpoch,
-          'phoneNumber': '', // You might want to store the number too
-        }));
-        await prefs.setStringList('call_reminders', reminders);
-            debugPrint('✅ Saved reminder to SharedPreferences:');
-      debugPrint('Call ID: $_callId');
-      debugPrint('Remarks: $remarks');
-      debugPrint('Time: ${_selectedDate!.toIso8601String()}');
-      debugPrint('All stored reminders: ${prefs.getStringList('call_reminders')}');
-        await NativeReminder.scheduleReminder(
-          id: DateTime.now().millisecondsSinceEpoch ~/ 1000,
-          title: "Reminder",
-          body: remarks,
-          epochMillis: _selectedDate!.millisecondsSinceEpoch,
-        );
-        _showMessage("Reminder saved and scheduled!");
-        Navigator.of(context).pop();
-      } else {
-        final res = jsonDecode(response.body);
-        _showMessage(res['message'] ?? 'Failed to save details.');
-      }
-    } catch (e) {
-      _showMessage("Something went wrong.");
-    } finally {
-      setState(() => _isLoading = false);
-    }
+  if (remarks.isEmpty || reminder.isEmpty) {
+    _showMessage("Please enter remarks and select a date.");
+    return;
   }
+
+  setState(() => _isLoading = true);
+
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final reminders = prefs.getStringList('call_reminders') ?? [];
+reminders.add(jsonEncode({
+  'remarks': remarks,
+  'reminderTime': _selectedDate!.millisecondsSinceEpoch,
+  'phoneNumber': widget.phoneNumber,
+}));
+
+    await prefs.setStringList('call_reminders', reminders);
+
+    debugPrint('✅ Locally saved reminder:');
+    debugPrint('Remarks: $remarks');
+    debugPrint('Time: ${_selectedDate!.toIso8601String()}');
+
+    await NativeReminder.scheduleReminder(
+      id: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      title: "Reminder",
+      body: remarks,
+      epochMillis: _selectedDate!.millisecondsSinceEpoch,
+    );
+
+    _showMessage("Reminder saved locally and scheduled!");
+    Navigator.of(context).pop();
+  } catch (e) {
+    _showMessage("Something went wrong.");
+  } finally {
+    setState(() => _isLoading = false);
+  }
+}
+
 
   Future<void> _setSystemAlarm() async {
     if (_selectedDate == null || _remarksController.text.trim().isEmpty) {

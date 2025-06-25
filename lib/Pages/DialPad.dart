@@ -821,7 +821,7 @@ void _listenToPhoneState() async {
 
         if (mounted) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            _showReminderRemarksForm(context);
+            // _showReminderRemarksForm(context);
           });
         }
 
@@ -838,26 +838,26 @@ void _listenToPhoneState() async {
   }
 }
   //show reminder remarks form
-Future<void> _showReminderRemarksForm(BuildContext context) async {
-  await Navigator.of(context).push(
-    PageRouteBuilder(
-      opaque: false, // makes background transparent
-      barrierColor: Colors.transparent, // removes black overlay
-pageBuilder: (_, __, ___) {
-  return Scaffold(
-    backgroundColor: Colors.black.withOpacity(0.5), // optional dim
-    body: Center(
-      child: Material(
-        borderRadius: BorderRadius.circular(16),
-        child: PostCallDetailsCard(),
-      ),
-    ),
-  );
-}
+// Future<void> _showReminderRemarksForm(BuildContext context) async {
+//   await Navigator.of(context).push(
+//     PageRouteBuilder(
+//       opaque: false, // makes background transparent
+//       barrierColor: Colors.transparent, // removes black overlay
+// pageBuilder: (_, __, ___) {
+//   return Scaffold(
+//     backgroundColor: Colors.black.withOpacity(0.5), // optional dim
+//     body: Center(
+//       child: Material(
+//         borderRadius: BorderRadius.circular(16),
+//         child: PostCallDetailsCard(),
+//       ),
+//     ),
+//   );
+// }
 
-    ),
-  );
-}
+//     ),
+//   );
+// }
 
 
 void _addDigit(String digit) {

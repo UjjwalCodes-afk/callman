@@ -149,8 +149,6 @@ Future<void> _fetchCallLogs() async {
     if (idx == 0)
       target = DashboardScreen(email: widget.email, userName: widget.userName);
     if (idx == 2) target =  DialPadScreen1();
-    if (idx == 3)
-      target = DialPadScreen(userName: widget.userName, email:widget.email ,);
     if (target != null) {
       Navigator.pushReplacement(
           context, MaterialPageRoute(builder: (_) => target!));
@@ -282,11 +280,11 @@ Future<void> _fetchCallLogs() async {
             BottomNavigationBarItem(icon: Icon(Icons.call), label: 'Call'),
                                     BottomNavigationBarItem(
               icon: Icon(Icons.alarm),
-              label: "Dashboard",
+              label: "Reminders",
             ),
                         BottomNavigationBarItem(
               icon: Icon(Icons.menu),
-              label: "Dashboard",
+              label: "Menu",
             ),
             // BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: 'Wallet'),
           ],

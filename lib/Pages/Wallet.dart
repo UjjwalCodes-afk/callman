@@ -1,6 +1,7 @@
 import 'package:callman/Pages/DialPad.dart';
 import 'package:callman/Pages/DoctorHome.dart';
 import 'package:callman/Pages/HomePage.dart';
+import 'package:callman/Pages/dialpad2.dart';
 import 'package:flutter/material.dart';
 // import 'Shop.dart';
 
@@ -47,7 +48,7 @@ class _WalletState extends State<Wallet> {
                 Navigator.push(
     context,
     MaterialPageRoute(
-      builder: (_) => DialPadScreen()
+      builder: (_) => DialPadScreen1(),
     ),
   );
         break;
