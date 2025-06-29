@@ -52,6 +52,7 @@ dependencies:
   provider: ^6.1.5
   flutter_contacts: ^1.1.6
   url_launcher: ^6.2.6
+  android_alarm_manager_plus: ^4.0.7
  
 
 

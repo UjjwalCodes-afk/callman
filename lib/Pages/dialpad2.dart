@@ -1,3 +1,4 @@
+
 import 'package:callman/Dashboard/Dashboard.dart';
 import 'package:callman/Pages/Interaction.dart';
 import 'package:callman/Pages/PostCallsDetailsScreen.dart';
@@ -6,9 +7,7 @@ import 'package:phone_state/phone_state.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:shared_preferences/shared_preferences.dart'; // ✅ Added import
-import 'dart:async';
-import 'package:flutter/services.dart'; // For MethodChannel
-import 'package:android_intent_plus/android_intent.dart'; // For permissions
+import 'dart:async'; 
 
 
 
@@ -35,36 +34,10 @@ class _DialPadScreen1State extends State<DialPadScreen1> {
   String? _userName;
   String? _email;
 
-  static const MethodChannel overlayChannel = MethodChannel('com.callman.overlay');
+  
 
-Future<void> showOverlay(String name, String number) async {
-  try {
-    if (name.trim().isEmpty || number.trim().isEmpty) {
-      debugPrint("❌ Overlay not shown – Missing name or number");
-      return;
-    }
 
-    final normalizedNumber = normalizeNumber(number);
-    debugPrint("📲 Sending to Overlay → Name: $name | Number: $normalizedNumber");
 
-    await overlayChannel.invokeMethod('showOverlay', {
-      'callerName': name,
-      'callerNumber': normalizedNumber,
-    });
-  } on PlatformException catch (e) {
-    debugPrint("Failed to show overlay: '${e.message}'");
-  }
-}
-
-Future<void> checkOverlayPermission() async {
-  if (!await Permission.systemAlertWindow.isGranted) {
-    final intent = AndroidIntent(
-      action: 'android.settings.action.MANAGE_OVERLAY_PERMISSION',
-      data: 'package:com.example.callman',
-    );
-    await intent.launch();
-  }
-}
 
 // Normalize number utility
 String normalizeNumber(String number) {
@@ -238,10 +211,6 @@ Future<void> _showInteractionAndCall() async {
 
     _hasCalled = true;
 
-    // ✅ Show overlay first
-    await checkOverlayPermission();
-    await showOverlay(callerName, _phoneNumber);
-
     // ✅ Show interaction screen
     await Navigator.push(
       context,
@@ -253,6 +222,9 @@ Future<void> _showInteractionAndCall() async {
       ),
     );
 
+    // ✅ Reset _hasCalled after returning
+    _hasCalled = false;
+
     // ✅ Make the call
     await _makeCall();
 
@@ -263,6 +235,8 @@ Future<void> _showInteractionAndCall() async {
     debugPrint('❌ Error in _showInteractionAndCall: $e');
   }
 }
+
+
 
 
 

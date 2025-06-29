@@ -183,24 +183,6 @@ String getCallType(int? callTypeValue) {
                   ),
                 ),
                 const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () {
-                      // Navigate to Add Interaction
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF0B2C49),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                    ),
-                    child: const Text(
-                      'ADD INTERACTION',
-                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, letterSpacing: 1.1),
-                    ),
-                  ),
-                ),
               ],
             ),
           ],
