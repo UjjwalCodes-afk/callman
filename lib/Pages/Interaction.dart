@@ -1,3 +1,4 @@
+import 'package:callman/Pages/AddInteractionForm.dart';
 import 'package:flutter/material.dart';
 import 'package:call_log/call_log.dart';
 import 'package:intl/intl.dart';
@@ -182,7 +183,26 @@ String getCallType(int? callTypeValue) {
                     ),
                   ),
                 ),
+
                 const SizedBox(width: 12),
+                               Expanded(
+                  child: ElevatedButton(
+                    onPressed: ()  {
+                      Navigator.push(context, MaterialPageRoute(builder: (context) => CallManFormApp()));
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green[700],
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    child: const Text(
+                      'Add Interaction',
+                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, letterSpacing: 1.1),
+                    ),
+                  ),
+                ),
               ],
             ),
           ],
